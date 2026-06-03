@@ -3,8 +3,10 @@ import {
   View, Text, ScrollView, StyleSheet,
   RefreshControl, Animated,
 } from 'react-native';
-import { useQuestStore, DailyQuest } from '../../stores/questStore';
+import { useQuestStore, DailyQuest, CompleteResult } from '../../stores/questStore';
 import { QuestCard } from '../../components/QuestCard';
+import { LevelUpModal } from '../../components/LevelUpModal';
+import { RankUpModal } from '../../components/RankUpModal';
 import { Colors } from '../../constants/theme';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -17,6 +19,9 @@ export default function QuestsScreen() {
   const [bannerVisible, setBannerVisible] = useState(false);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
 
+  const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number } | null>(null);
+  const [rankUpData, setRankUpData] = useState<{ newRank: string; newLevel: number } | null>(null);
+
   useEffect(() => { fetch(); }, []);
 
   function showBanner() {
@@ -28,10 +33,19 @@ export default function QuestsScreen() {
     ]).start(() => setBannerVisible(false));
   }
 
+  function handleModalResult(result: CompleteResult) {
+    if (result.rankedUp) {
+      setRankUpData({ newRank: result.newRank, newLevel: result.newLevel });
+    } else if (result.leveledUp) {
+      setLevelUpData({ oldLevel: result.oldLevel, newLevel: result.newLevel });
+    }
+  }
+
   async function handleComplete(questId: string) {
     try {
-      await complete(questId);
+      const result = await complete(questId);
       showBanner();
+      handleModalResult(result);
     } catch { /* handled in store */ }
   }
 
@@ -98,6 +112,20 @@ export default function QuestsScreen() {
           </View>
         )}
       </ScrollView>
+
+      <LevelUpModal
+        visible={!!levelUpData}
+        oldLevel={levelUpData?.oldLevel ?? 1}
+        newLevel={levelUpData?.newLevel ?? 1}
+        onClose={() => setLevelUpData(null)}
+      />
+
+      <RankUpModal
+        visible={!!rankUpData}
+        newRank={rankUpData?.newRank ?? 'E'}
+        newLevel={rankUpData?.newLevel ?? 1}
+        onClose={() => setRankUpData(null)}
+      />
     </View>
   );
 }
