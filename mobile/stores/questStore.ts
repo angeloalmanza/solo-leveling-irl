@@ -1,0 +1,72 @@
+import { create } from 'zustand';
+import { api } from '../lib/api';
+import { useCharacterStore } from './characterStore';
+
+export interface QuestTemplate {
+  id: string;
+  title: string;
+  description: string;
+  category: 'fitness' | 'mente';
+  xpReward: number;
+  statRewards: Record<string, number>;
+  difficulty: number;
+}
+
+export interface DailyQuest {
+  id: string;
+  completed: boolean;
+  completedAt: string | null;
+  questTemplate: QuestTemplate;
+}
+
+export interface CompleteResult {
+  leveledUp: boolean;
+  rankedUp: boolean;
+  oldLevel: number;
+  newLevel: number;
+  oldRank: string;
+  newRank: string;
+}
+
+interface QuestState {
+  quests: DailyQuest[];
+  loading: boolean;
+  completing: string | null;
+  lastResult: CompleteResult | null;
+  fetch: () => Promise<void>;
+  complete: (questId: string) => Promise<CompleteResult>;
+}
+
+export const useQuestStore = create<QuestState>((set, get) => ({
+  quests: [],
+  loading: false,
+  completing: null,
+  lastResult: null,
+
+  fetch: async () => {
+    set({ loading: true });
+    try {
+      const { data } = await api.get<DailyQuest[]>('/quests/daily');
+      set({ quests: data });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  complete: async (questId) => {
+    set({ completing: questId });
+    try {
+      const { data } = await api.post(`/quests/daily/${questId}/complete`);
+      set((s) => ({
+        quests: s.quests.map((q) =>
+          q.id === questId ? { ...q, completed: true, completedAt: new Date().toISOString() } : q
+        ),
+        lastResult: data,
+      }));
+      useCharacterStore.getState().setCharacter(data.character);
+      return data as CompleteResult;
+    } finally {
+      set({ completing: null });
+    }
+  },
+}));
