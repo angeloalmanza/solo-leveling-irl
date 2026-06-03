@@ -1,0 +1,12 @@
+{
+  "name": "solo-leveling-irl",
+  "private": true,
+  "workspaces": [
+    "mobile",
+    "backend"
+  ],
+  "scripts": {
+    "mobile": "npm run start --workspace=mobile",
+    "backend": "npm run dev --workspace=backend"
+  }
+}

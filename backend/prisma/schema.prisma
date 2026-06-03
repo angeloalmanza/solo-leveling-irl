@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  createdAt    DateTime    @default(now())
+  profile      UserProfile?
+  character    Character?
+}
+
+model UserProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weight        Float
+  height        Float
+  age           Int
+  sex           Sex
+  activityLevel ActivityLevel
+  updatedAt     DateTime @updatedAt
+}
+
+model Character {
+  id                  String               @id @default(cuid())
+  userId              String               @unique
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  level               Int                  @default(1)
+  xp                  Int                  @default(0)
+  rank                Rank                 @default(E)
+  str                 Int                  @default(10)
+  agi                 Int                  @default(10)
+  int                 Int                  @default(10)
+  vit                 Int                  @default(10)
+  end                 Int                  @default(10)
+  activeTitle         String?
+  createdAt           DateTime             @default(now())
+  dailyQuests         DailyQuest[]
+  mealLogs            MealLog[]
+  nutritionGoal       NutritionGoal?
+  unlockedShadows     UnlockedShadow[]
+  unlockedAchievements UnlockedAchievement[]
+}
+
+model QuestTemplate {
+  id          String        @id @default(cuid())
+  title       String
+  description String
+  category    QuestCategory
+  xpReward    Int
+  statRewards Json
+  difficulty  Int           @default(1)
+  dailyQuests DailyQuest[]
+}
+
+model DailyQuest {
+  id              String        @id @default(cuid())
+  characterId     String
+  character       Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  questTemplateId String
+  questTemplate   QuestTemplate @relation(fields: [questTemplateId], references: [id])
+  date            DateTime      @db.Date
+  completed       Boolean       @default(false)
+  completedAt     DateTime?
+
+  @@unique([characterId, questTemplateId, date])
+}
+
+model Food {
+  id       String     @id @default(cuid())
+  name     String
+  calories Float
+  protein  Float
+  carbs    Float
+  fat      Float
+  fiber    Float      @default(0)
+  per100g  Boolean    @default(true)
+  source   String     @default("manual")
+  items    MealItem[]
+}
+
+model MealLog {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  mealType    MealType
+  items       MealItem[]
+  createdAt   DateTime  @default(now())
+}
+
+model MealItem {
+  id         String   @id @default(cuid())
+  mealLogId  String
+  mealLog    MealLog  @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
+  foodId     String
+  food       Food     @relation(fields: [foodId], references: [id])
+  quantity   Float
+}
+
+model NutritionGoal {
+  id          String    @id @default(cuid())
+  characterId String    @unique
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  calories    Float
+  protein     Float
+  carbs       Float
+  fat         Float
+  updatedAt   DateTime  @updatedAt
+}
+
+model Shadow {
+  id               String           @id @default(cuid())
+  name             String
+  description      String
+  unlockCondition  String
+  rank             Rank
+  imageKey         String?
+  unlockedBy       UnlockedShadow[]
+}
+
+model UnlockedShadow {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  shadowId    String
+  shadow      Shadow    @relation(fields: [shadowId], references: [id])
+  unlockedAt  DateTime  @default(now())
+
+  @@unique([characterId, shadowId])
+}
+
+model Achievement {
+  id          String               @id @default(cuid())
+  name        String
+  description String
+  titleReward String
+  condition   String
+  unlockedBy  UnlockedAchievement[]
+}
+
+model UnlockedAchievement {
+  id            String      @id @default(cuid())
+  characterId   String
+  character     Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([characterId, achievementId])
+}
+
+enum Sex {
+  male
+  female
+}
+
+enum ActivityLevel {
+  sedentary
+  light
+  moderate
+  active
+  very_active
+}
+
+enum Rank {
+  E
+  D
+  C
+  B
+  A
+  S
+}
+
+enum QuestCategory {
+  fitness
+  mente
+}
+
+enum MealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
