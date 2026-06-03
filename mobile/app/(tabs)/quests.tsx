@@ -7,6 +7,7 @@ import { useQuestStore, DailyQuest, CompleteResult } from '../../stores/questSto
 import { QuestCard } from '../../components/QuestCard';
 import { LevelUpModal } from '../../components/LevelUpModal';
 import { RankUpModal } from '../../components/RankUpModal';
+import { UnlockModal, UnlockItem } from '../../components/UnlockModal';
 import { Colors } from '../../constants/theme';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -21,6 +22,7 @@ export default function QuestsScreen() {
 
   const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number } | null>(null);
   const [rankUpData, setRankUpData] = useState<{ newRank: string; newLevel: number } | null>(null);
+  const [unlockQueue, setUnlockQueue] = useState<UnlockItem[]>([]);
 
   useEffect(() => { fetch(); }, []);
 
@@ -39,6 +41,12 @@ export default function QuestsScreen() {
     } else if (result.leveledUp) {
       setLevelUpData({ oldLevel: result.oldLevel, newLevel: result.newLevel });
     }
+    const { shadows, achievements } = result.newlyUnlocked;
+    const items: UnlockItem[] = [
+      ...shadows.map((s) => ({ type: 'shadow' as const, name: s.name, rank: s.rank, description: s.description })),
+      ...achievements.map((a) => ({ type: 'achievement' as const, name: a.name, titleReward: a.titleReward, description: a.description })),
+    ];
+    if (items.length > 0) setUnlockQueue(items);
   }
 
   async function handleComplete(questId: string) {
@@ -125,6 +133,12 @@ export default function QuestsScreen() {
         newRank={rankUpData?.newRank ?? 'E'}
         newLevel={rankUpData?.newLevel ?? 1}
         onClose={() => setRankUpData(null)}
+      />
+
+      <UnlockModal
+        visible={unlockQueue.length > 0}
+        item={unlockQueue[0] ?? null}
+        onClose={() => setUnlockQueue((q) => q.slice(1))}
       />
     </View>
   );

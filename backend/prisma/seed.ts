@@ -3,6 +3,10 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.unlockedAchievement.deleteMany();
+  await prisma.unlockedShadow.deleteMany();
+  await prisma.achievement.deleteMany();
+  await prisma.shadow.deleteMany();
   await prisma.questTemplate.deleteMany();
 
   const fitnessQuests = [
@@ -39,6 +43,46 @@ async function main() {
   }
 
   console.log(`Seeded ${fitnessQuests.length} fitness + ${menteQuests.length} mente quest templates`);
+
+  const shadows = [
+    { name: 'Iron', description: 'Un soldato di ferro forgiato dalla costanza fisica.', unlockCondition: 'fitness_quests_10', rank: 'E' },
+    { name: 'Tank', description: 'Guerriero corazzato, resistente e inarrestabile.', unlockCondition: 'level_10', rank: 'D' },
+    { name: 'Igris', description: 'Il cavaliere scarlatto. Leale e letale.', unlockCondition: 'rank_D', rank: 'D' },
+    { name: 'Kaisel', description: 'Il drago alato, veloce come il pensiero.', unlockCondition: 'fitness_quests_30', rank: 'C' },
+    { name: 'Tusk', description: 'La bestia primordiale, forza bruta incarnata.', unlockCondition: 'str_30', rank: 'C' },
+    { name: 'Iron (Elite)', description: 'La versione potenziata del primo soldato.', unlockCondition: 'rank_C', rank: 'B' },
+    { name: 'Beru', description: 'Il re delle formiche. Velocità e veleno.', unlockCondition: 'rank_B', rank: 'A' },
+    { name: 'Greed', description: "L'avido serpente che divora la debolezza.", unlockCondition: 'level_50', rank: 'A' },
+    { name: 'Bellion', description: 'Il grande maresciallo delle ombre.', unlockCondition: 'rank_A', rank: 'S' },
+    { name: 'Shadow Sovereign', description: "L'ombra suprema. Nata dalla piena padronanza di sé.", unlockCondition: 'rank_S', rank: 'S' },
+  ];
+
+  const achievements = [
+    { name: 'Arise', titleReward: 'Arise', description: 'La prima ombra è sorta.', condition: 'shadows_1' },
+    { name: 'Iron Body', titleReward: 'Iron Body', description: 'STR raggiunge 30.', condition: 'str_30' },
+    { name: 'Quick Step', titleReward: 'Quick Step', description: 'AGI raggiunge 30.', condition: 'agi_30' },
+    { name: 'Scholar', titleReward: 'Scholar', description: 'INT raggiunge 30.', condition: 'int_30' },
+    { name: 'Well Nourished', titleReward: 'Well Nourished', description: 'VIT raggiunge 30.', condition: 'vit_30' },
+    { name: 'Endurance King', titleReward: 'Endurance King', description: 'END raggiunge 30.', condition: 'end_30' },
+    { name: 'Hunter', titleReward: 'Hunter', description: 'Raggiunto il livello 10.', condition: 'level_10' },
+    { name: 'Veteran', titleReward: 'Veteran Hunter', description: 'Raggiunto il livello 25.', condition: 'level_25' },
+    { name: 'Elite', titleReward: 'Elite Hunter', description: 'Raggiunto il C-Rank.', condition: 'rank_C' },
+    { name: 'Commander', titleReward: 'Commander', description: 'Raggiunto il B-Rank.', condition: 'rank_B' },
+    { name: 'Shadow Warrior', titleReward: 'Shadow Warrior', description: '3 ombre sbloccate.', condition: 'shadows_3' },
+    { name: 'Diligent', titleReward: 'Diligent', description: '20 quest completate in totale.', condition: 'total_quests_20' },
+    { name: 'Shadow Monarch', titleReward: 'Shadow Monarch', description: 'Tutte le ombre sbloccate.', condition: 'all_shadows' },
+    { name: 'Supreme', titleReward: 'Supreme Hunter', description: 'Raggiunto il S-Rank.', condition: 'rank_S' },
+    { name: 'Perfect Body', titleReward: 'Perfect Body', description: 'Tutte le stat raggiungono 50.', condition: 'all_stats_50' },
+  ];
+
+  for (const s of shadows) {
+    await prisma.shadow.create({ data: { ...s, rank: s.rank as any } });
+  }
+  for (const a of achievements) {
+    await prisma.achievement.create({ data: a });
+  }
+
+  console.log(`Seeded ${shadows.length} shadows + ${achievements.length} achievements`);
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());

@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { searchFoods } from '../services/foodService';
 import { applyXP, applyStats } from '../services/levelService';
+import { runUnlockCheck } from '../services/unlockService';
 
 const router = Router();
 
@@ -192,6 +193,7 @@ async function checkAndGrantVitReward(characterId: string, userId: string) {
     await prisma.character.update({ where: { id: characterId }, data: { lastNutritionRewardDate: todayDate } });
     await applyStats(characterId, { vit: 1 });
     await applyXP(characterId, 50);
+    await runUnlockCheck(characterId);
   }
 }
 

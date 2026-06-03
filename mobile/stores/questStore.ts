@@ -19,6 +19,14 @@ export interface DailyQuest {
   questTemplate: QuestTemplate;
 }
 
+export interface UnlockItem {
+  id: string;
+  name: string;
+  rank?: string;
+  titleReward?: string;
+  description: string;
+}
+
 export interface CompleteResult {
   leveledUp: boolean;
   rankedUp: boolean;
@@ -26,6 +34,7 @@ export interface CompleteResult {
   newLevel: number;
   oldRank: string;
   newRank: string;
+  newlyUnlocked: { shadows: UnlockItem[]; achievements: UnlockItem[] };
 }
 
 interface QuestState {

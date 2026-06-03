@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { applyXP, applyStats } from '../services/levelService';
+import { runUnlockCheck } from '../services/unlockService';
 
 const router = Router();
 
@@ -81,9 +82,12 @@ router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
   await applyStats(character.id, statRewards);
   const levelResult = await applyXP(character.id, quest.questTemplate.xpReward);
 
-  const updatedCharacter = await prisma.character.findUniqueOrThrow({ where: { id: character.id } });
+  const [updatedCharacter, newlyUnlocked] = await Promise.all([
+    prisma.character.findUniqueOrThrow({ where: { id: character.id } }),
+    runUnlockCheck(character.id),
+  ]);
 
-  res.json({ character: updatedCharacter, ...levelResult });
+  res.json({ character: updatedCharacter, ...levelResult, newlyUnlocked });
 });
 
 export default router;
