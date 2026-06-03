@@ -1,180 +1,225 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import {
-  View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
-  ScrollView,
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView,
+  Platform, ScrollView,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useNutritionStore, Food, MealLog } from '../../stores/nutritionStore';
 import { Colors } from '../../constants/theme';
 
-type Unit = { label: string; abbr: string; toGrams: number };
-
-const UNITS: Unit[] = [
-  { label: 'grammi', abbr: 'g', toGrams: 1 },
-  { label: 'millilitri', abbr: 'ml', toGrams: 1 },
-  { label: 'tazza', abbr: 'tazza', toGrams: 240 },
-  { label: 'cucchiaio', abbr: 'cucch.', toGrams: 15 },
-  { label: 'cucchiaino', abbr: 'cucch.no', toGrams: 5 },
-  { label: 'porzione', abbr: 'porz.', toGrams: 100 },
+const EXAMPLES = [
+  'pasta al sugo 200g',
+  'pizza margherita una fetta',
+  '2 uova strapazzate',
+  'petto di pollo 150g',
+  'yogurt greco con miele',
+  'BigMac McDonald\'s',
+  'cappuccino e cornetto',
+  'insalata caesar',
 ];
 
-function toGrams(amount: number, unit: Unit): number {
-  return amount * unit.toGrams;
+interface ParsedResult {
+  food: Food;
+  grams: number;
 }
 
 export default function FoodSearchScreen() {
   const { mealType } = useLocalSearchParams<{ mealType: MealLog['mealType'] }>();
-  const { searchResults, searching, searchFoods, addMealItem, clearSearch } = useNutritionStore();
+  const { aiParseFood, addMealItem } = useNutritionStore();
 
-  const [query, setQuery] = useState('');
-  const [selectedFood, setSelectedFood] = useState<Food | null>(null);
-  const [amount, setAmount] = useState('1');
-  const [unit, setUnit] = useState<Unit>(UNITS[0]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ParsedResult | null>(null);
+  const [grams, setGrams] = useState('');
   const [adding, setAdding] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const t = setTimeout(() => { if (query.length >= 2) searchFoods(query); }, 400);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  useEffect(() => () => clearSearch(), []);
-
-  function selectFood(food: Food) {
-    setSelectedFood(food);
-    setAmount('100');
-    setUnit(UNITS[0]);
+  async function handleAnalyze() {
+    const desc = input.trim();
+    if (!desc) return;
+    setLoading(true);
+    setResult(null);
+    setError('');
+    try {
+      const parsed = await aiParseFood(desc);
+      setResult(parsed);
+      setGrams(String(parsed.grams));
+    } catch {
+      setError('Il Sistema non ha riconosciuto l\'alimento. Riprova con una descrizione più precisa.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleAdd() {
-    if (!selectedFood || !mealType) return;
+    if (!result || !mealType) return;
     setAdding(true);
     try {
-      const grams = toGrams(parseFloat(amount) || 1, unit);
-      await addMealItem(mealType, selectedFood.id, grams);
+      const qty = Math.max(1, parseFloat(grams) || result.grams);
+      await addMealItem(mealType, result.food.id, qty);
       router.back();
     } finally {
       setAdding(false);
     }
   }
 
-  const grams = toGrams(parseFloat(amount) || 0, unit);
-  const previewKcal = selectedFood ? Math.round(selectedFood.calories * grams / 100) : 0;
-  const previewProt = selectedFood ? Math.round(selectedFood.protein * grams / 100 * 10) / 10 : 0;
-
-  const renderFood = useCallback(({ item }: { item: Food }) => (
-    <TouchableOpacity style={styles.foodRow} onPress={() => selectFood(item)}>
-      <View style={styles.foodInfo}>
-        <Text style={styles.foodName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.foodMacros}>
-          {item.calories} kcal · P {item.protein}g · C {item.carbs}g · G {item.fat}g
-        </Text>
-      </View>
-      <Text style={styles.per100}>/ 100g</Text>
-    </TouchableOpacity>
-  ), []);
+  const totalKcal = result
+    ? Math.round(result.food.calories * (parseFloat(grams) || result.grams) / 100)
+    : 0;
+  const totalProt = result
+    ? Math.round(result.food.protein * (parseFloat(grams) || result.grams) / 100 * 10) / 10
+    : 0;
+  const totalCarbs = result
+    ? Math.round(result.food.carbs * (parseFloat(grams) || result.grams) / 100 * 10) / 10
+    : 0;
+  const totalFat = result
+    ? Math.round(result.food.fat * (parseFloat(grams) || result.grams) / 100 * 10) / 10
+    : 0;
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Indietro</Text>
+    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+          <Text style={s.backText}>← Indietro</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>CERCA ALIMENTO</Text>
+        <Text style={s.headerTitle}>[ AI FOOD SCANNER ]</Text>
       </View>
 
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.input}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="es. pollo, riso, mela..."
-          placeholderTextColor={Colors.textMuted}
-          autoFocus
-          returnKeyType="search"
-        />
-        {searching && <ActivityIndicator color={Colors.accent} style={styles.spinner} />}
-      </View>
+      <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+        <Text style={s.label}>DESCRIVI CIÒ CHE HAI MANGIATO</Text>
+        <Text style={s.sublabel}>
+          Scrivi in modo naturale — quantità, piatto, fast food. L'AI calcola tutto.
+        </Text>
 
-      <FlatList
-        data={searchResults}
-        keyExtractor={(item) => item.id}
-        renderItem={renderFood}
-        keyboardShouldPersistTaps="handled"
-        ListEmptyComponent={
-          query.length >= 2 && !searching ? (
-            <Text style={styles.empty}>Nessun risultato per "{query}"</Text>
-          ) : null
-        }
-      />
+        <View style={s.inputRow}>
+          <TextInput
+            style={s.input}
+            value={input}
+            onChangeText={(t) => { setInput(t); setResult(null); setError(''); }}
+            placeholder="es. pasta con il sugo 200g"
+            placeholderTextColor={Colors.textMuted}
+            multiline
+            returnKeyType="done"
+            onSubmitEditing={handleAnalyze}
+          />
+        </View>
 
-      {/* Quantity modal */}
-      <Modal visible={!!selectedFood} transparent animationType="slide">
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle} numberOfLines={2}>{selectedFood?.name}</Text>
-            <Text style={styles.modalSub}>
-              {selectedFood?.calories} kcal · P {selectedFood?.protein}g · C {selectedFood?.carbs}g · G {selectedFood?.fat}g — per 100g
-            </Text>
+        <TouchableOpacity
+          style={[s.analyzeBtn, (!input.trim() || loading) && s.analyzeBtnDisabled]}
+          onPress={handleAnalyze}
+          disabled={!input.trim() || loading}
+        >
+          {loading ? (
+            <View style={s.loadingRow}>
+              <ActivityIndicator color={Colors.background} size="small" />
+              <Text style={s.analyzeBtnText}>IL SISTEMA STA ANALIZZANDO...</Text>
+            </View>
+          ) : (
+            <Text style={s.analyzeBtnText}>⚡ ANALIZZA CON AI</Text>
+          )}
+        </TouchableOpacity>
 
-            {/* Amount input */}
-            <Text style={styles.sectionLabel}>QUANTITÀ</Text>
+        {error ? <Text style={s.error}>{error}</Text> : null}
+
+        {!result && !loading && (
+          <View style={s.examples}>
+            <Text style={s.examplesLabel}>ESEMPI</Text>
+            <View style={s.chips}>
+              {EXAMPLES.map((ex) => (
+                <TouchableOpacity
+                  key={ex}
+                  style={s.chip}
+                  onPress={() => { setInput(ex); setResult(null); setError(''); }}
+                >
+                  <Text style={s.chipText}>{ex}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {result && (
+          <View style={s.resultCard}>
+            <View style={s.resultHeader}>
+              <Text style={s.resultTag}>[ ALIMENTO RICONOSCIUTO ]</Text>
+              <Text style={s.resultName}>{result.food.name}</Text>
+              <Text style={s.resultPer}>Valori per 100g</Text>
+              <View style={s.macroRow}>
+                <MacroChip label="KCAL" value={result.food.calories} color={Colors.accent} />
+                <MacroChip label="P" value={result.food.protein} color="#22c55e" unit="g" />
+                <MacroChip label="C" value={result.food.carbs} color="#3b82f6" unit="g" />
+                <MacroChip label="G" value={result.food.fat} color="#eab308" unit="g" />
+              </View>
+            </View>
+
+            <View style={s.divider} />
+
+            <Text style={s.qtyLabel}>QUANTITÀ (grammi)</Text>
             <TextInput
-              style={styles.amountInput}
-              value={amount}
-              onChangeText={setAmount}
+              style={s.qtyInput}
+              value={grams}
+              onChangeText={setGrams}
               keyboardType="decimal-pad"
               selectTextOnFocus
             />
 
-            {/* Unit picker */}
-            <Text style={styles.sectionLabel}>UNITÀ</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.unitScroll}>
-              {UNITS.map((u) => (
-                <TouchableOpacity
-                  key={u.abbr}
-                  style={[styles.unitChip, unit.abbr === u.abbr && styles.unitChipActive]}
-                  onPress={() => setUnit(u)}
-                >
-                  <Text style={[styles.unitText, unit.abbr === u.abbr && styles.unitTextActive]}>
-                    {u.label}
-                  </Text>
-                  <Text style={[styles.unitGrams, unit.abbr === u.abbr && styles.unitTextActive]}>
-                    {u.toGrams}g
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Preview */}
-            <View style={styles.preview}>
-              <Text style={styles.previewEq}>
-                {parseFloat(amount) || 0} {unit.abbr} = {Math.round(grams)}g
-              </Text>
-              <Text style={styles.previewKcal}>
-                ≈ <Text style={{ color: Colors.accent }}>{previewKcal} kcal</Text>
-                {'  '}P {previewProt}g
-              </Text>
+            <View style={s.totalBox}>
+              <Text style={s.totalLabel}>TOTALE PORZIONE</Text>
+              <View style={s.totalRow}>
+                <TotalItem label="kcal" value={totalKcal} color={Colors.accent} />
+                <TotalItem label="prot" value={totalProt} color="#22c55e" />
+                <TotalItem label="carb" value={totalCarbs} color="#3b82f6" />
+                <TotalItem label="grassi" value={totalFat} color="#eab308" />
+              </View>
             </View>
 
-            <View style={styles.buttons}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setSelectedFood(null)}>
-                <Text style={styles.cancelText}>Annulla</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.addBtn} onPress={handleAdd} disabled={adding}>
-                {adding
-                  ? <ActivityIndicator color={Colors.background} />
-                  : <Text style={styles.addText}>AGGIUNGI</Text>}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={s.addBtn} onPress={handleAdd} disabled={adding}>
+              {adding
+                ? <ActivityIndicator color={Colors.background} />
+                : <Text style={s.addBtnText}>AGGIUNGI AL PASTO</Text>}
+            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+        )}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
+function MacroChip({ label, value, color, unit = '' }: { label: string; value: number; color: string; unit?: string }) {
+  return (
+    <View style={[mc.chip, { borderColor: color }]}>
+      <Text style={[mc.label, { color }]}>{label}</Text>
+      <Text style={[mc.value, { color }]}>{value}{unit}</Text>
+    </View>
+  );
+}
+
+function TotalItem({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <View style={ti.box}>
+      <Text style={[ti.value, { color }]}>{value}</Text>
+      <Text style={ti.label}>{label}</Text>
+    </View>
+  );
+}
+
+const mc = StyleSheet.create({
+  chip: {
+    flex: 1, borderWidth: 1, borderRadius: 6, padding: 8,
+    alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  label: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
+  value: { fontSize: 14, fontWeight: '800', marginTop: 2 },
+});
+
+const ti = StyleSheet.create({
+  box: { flex: 1, alignItems: 'center' },
+  value: { fontSize: 20, fontWeight: '800' },
+  label: { color: Colors.textMuted, fontSize: 10, marginTop: 2 },
+});
+
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
   header: {
@@ -183,75 +228,72 @@ const styles = StyleSheet.create({
   },
   backBtn: { paddingVertical: 4 },
   backText: { color: Colors.accent, fontSize: 14 },
-  title: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, fontFamily: 'Orbitron_400Regular' },
+  headerTitle: { color: Colors.textMuted, fontSize: 10, letterSpacing: 3, fontFamily: 'Orbitron_400Regular' },
 
-  searchRow: { paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'center' },
+  content: { paddingHorizontal: 20, paddingBottom: 60 },
+
+  label: { color: Colors.textSecondary, fontSize: 10, letterSpacing: 3, fontFamily: 'Orbitron_400Regular', marginBottom: 6 },
+  sublabel: { color: Colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 16 },
+
+  inputRow: { marginBottom: 12 },
   input: {
-    flex: 1, backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1, borderColor: Colors.border, borderRadius: 8,
-    paddingHorizontal: 16, paddingVertical: 12,
-    color: Colors.text, fontSize: 15,
-  },
-  spinner: { marginLeft: 12 },
-
-  foodRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  foodInfo: { flex: 1 },
-  foodName: { color: Colors.text, fontSize: 15, fontWeight: '600', marginBottom: 3 },
-  foodMacros: { color: Colors.textSecondary, fontSize: 12 },
-  per100: { color: Colors.textMuted, fontSize: 11 },
-  empty: { color: Colors.textMuted, textAlign: 'center', marginTop: 40, fontSize: 14 },
-
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
-  modal: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: 40,
-  },
-  modalTitle: { color: Colors.text, fontSize: 17, fontWeight: '700', marginBottom: 4 },
-  modalSub: { color: Colors.textSecondary, fontSize: 12, marginBottom: 20 },
-
-  sectionLabel: {
-    color: Colors.textSecondary, fontSize: 10, letterSpacing: 3,
-    fontFamily: 'Orbitron_400Regular', marginBottom: 8, marginTop: 16,
-  },
-  amountInput: {
     backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1, borderColor: Colors.accent, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
     paddingHorizontal: 16, paddingVertical: 14,
-    color: Colors.text, fontSize: 28, fontWeight: '700', textAlign: 'center',
+    color: Colors.text, fontSize: 16, minHeight: 60,
   },
 
-  unitScroll: { flexGrow: 0, marginBottom: 4 },
-  unitChip: {
-    paddingHorizontal: 14, paddingVertical: 8, marginRight: 8,
-    borderRadius: 20, borderWidth: 1, borderColor: Colors.border,
-    alignItems: 'center',
+  analyzeBtn: {
+    backgroundColor: Colors.accent, borderRadius: 8,
+    paddingVertical: 16, alignItems: 'center', marginBottom: 20,
   },
-  unitChipActive: { borderColor: Colors.accent, backgroundColor: 'rgba(0,212,255,0.1)' },
-  unitText: { color: Colors.textSecondary, fontSize: 13 },
-  unitTextActive: { color: Colors.accent, fontWeight: '700' },
-  unitGrams: { color: Colors.textMuted, fontSize: 10, marginTop: 1 },
+  analyzeBtnDisabled: { opacity: 0.4 },
+  analyzeBtnText: { color: Colors.background, fontSize: 12, fontWeight: '800', letterSpacing: 3, fontFamily: 'Orbitron_700Bold' },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
-  preview: {
-    backgroundColor: 'rgba(0,212,255,0.06)', borderRadius: 8,
-    padding: 14, marginTop: 16, alignItems: 'center', gap: 4,
-  },
-  previewEq: { color: Colors.textSecondary, fontSize: 13 },
-  previewKcal: { color: Colors.textSecondary, fontSize: 16, fontWeight: '700' },
+  error: { color: '#ef4444', fontSize: 13, textAlign: 'center', marginBottom: 16 },
 
-  buttons: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  cancelBtn: {
-    flex: 1, paddingVertical: 14, borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 8, alignItems: 'center',
+  examples: { marginTop: 4 },
+  examplesLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 3, marginBottom: 12, fontFamily: 'Orbitron_400Regular' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 7,
   },
-  cancelText: { color: Colors.textSecondary, fontSize: 14 },
+  chipText: { color: Colors.textSecondary, fontSize: 12 },
+
+  resultCard: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1, borderColor: Colors.accent,
+    borderRadius: 12, padding: 18, gap: 4,
+  },
+  resultHeader: { gap: 6 },
+  resultTag: { color: Colors.accent, fontSize: 9, letterSpacing: 3, fontFamily: 'Orbitron_400Regular' },
+  resultName: { color: Colors.text, fontSize: 20, fontWeight: '800', marginBottom: 4 },
+  resultPer: { color: Colors.textMuted, fontSize: 11, marginBottom: 8 },
+  macroRow: { flexDirection: 'row', gap: 6 },
+
+  divider: { height: 1, backgroundColor: Colors.border, marginVertical: 16 },
+
+  qtyLabel: { color: Colors.textSecondary, fontSize: 10, letterSpacing: 3, fontFamily: 'Orbitron_400Regular', marginBottom: 8 },
+  qtyInput: {
+    backgroundColor: Colors.background,
+    borderWidth: 1, borderColor: Colors.accent, borderRadius: 8,
+    paddingHorizontal: 16, paddingVertical: 12,
+    color: Colors.text, fontSize: 28, fontWeight: '800', textAlign: 'center',
+    marginBottom: 16,
+  },
+
+  totalBox: {
+    backgroundColor: 'rgba(0,212,255,0.05)', borderRadius: 8,
+    padding: 14, marginBottom: 16,
+  },
+  totalLabel: { color: Colors.textMuted, fontSize: 9, letterSpacing: 3, fontFamily: 'Orbitron_400Regular', textAlign: 'center', marginBottom: 10 },
+  totalRow: { flexDirection: 'row' },
+
   addBtn: {
-    flex: 1, paddingVertical: 14, backgroundColor: Colors.accent,
-    borderRadius: 8, alignItems: 'center',
+    backgroundColor: Colors.accent, borderRadius: 8,
+    paddingVertical: 16, alignItems: 'center',
   },
-  addText: { color: Colors.background, fontSize: 13, fontWeight: '800', letterSpacing: 2 },
+  addBtnText: { color: Colors.background, fontSize: 12, fontWeight: '800', letterSpacing: 3, fontFamily: 'Orbitron_700Bold' },
 });

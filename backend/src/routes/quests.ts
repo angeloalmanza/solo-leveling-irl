@@ -3,56 +3,93 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { applyXP, applyStats } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
+import { generateDailyQuests } from '../services/aiService';
 
 const router = Router();
 
 router.get('/daily', requireAuth, async (req, res: Response) => {
-  const userId = (req as AuthRequest).userId;
-  const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  try {
+    const userId = (req as AuthRequest).userId;
+    const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  const existing = await prisma.dailyQuest.findMany({
-    where: { characterId: character.id, date: today },
-    include: { questTemplate: true },
-    orderBy: { questTemplate: { category: 'asc' } },
-  });
+    const existing = await prisma.dailyQuest.findMany({
+      where: { characterId: character.id, date: today },
+      include: { questTemplate: true },
+      orderBy: { questTemplate: { category: 'asc' } },
+    });
 
-  if (existing.length > 0) {
-    res.json(existing);
-    return;
+    if (existing.length > 0) {
+      res.json(existing);
+      return;
+    }
+
+    let aiQuests = null;
+    try {
+      aiQuests = await generateDailyQuests({
+        level: character.level,
+        rank: character.rank,
+        str: character.str,
+        agi: character.agi,
+        int: character.int,
+        end: character.end,
+        vit: character.vit,
+      });
+    } catch (err) {
+      console.error('AI quest generation failed, falling back to DB templates:', err);
+    }
+
+    if (aiQuests && aiQuests.length >= 2) {
+      const fitness = aiQuests.filter((q) => q.category === 'fitness').slice(0, 2);
+      const mente = aiQuests.filter((q) => q.category === 'mente').slice(0, 2);
+      const toCreate = [...fitness, ...mente];
+
+      if (toCreate.length >= 2) {
+        const results: typeof existing = [];
+        for (const q of toCreate) {
+          const template = await prisma.questTemplate.create({
+            data: {
+              title: q.title,
+              description: q.description,
+              category: q.category as 'fitness' | 'mente',
+              xpReward: q.xpReward,
+              statRewards: q.statRewards,
+              difficulty: q.difficulty,
+            },
+          });
+          const dailyQuest = await prisma.dailyQuest.create({
+            data: { characterId: character.id, questTemplateId: template.id, date: today },
+            include: { questTemplate: true },
+          });
+          results.push(dailyQuest);
+        }
+        res.json(results);
+        return;
+      }
+    }
+
+    // Fallback: random from existing templates
+    const fitnessTemplates = await prisma.questTemplate.findMany({ where: { category: 'fitness' } });
+    const menteTemplates = await prisma.questTemplate.findMany({ where: { category: 'mente' } });
+    const pick = <T>(arr: T[], n: number): T[] => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
+    const selected = [...pick(fitnessTemplates, 2), ...pick(menteTemplates, 2)];
+
+    const created = await prisma.$transaction(
+      selected.map((t) =>
+        prisma.dailyQuest.create({
+          data: { characterId: character.id, questTemplateId: t.id, date: today },
+          include: { questTemplate: true },
+        })
+      )
+    );
+
+    res.json(created);
+  } catch (err) {
+    console.error('GET /daily error:', err);
+    res.status(500).json({ error: 'Errore nel caricamento delle quest' });
   }
-
-  const fitnessTemplates = await prisma.questTemplate.findMany({
-    where: { category: 'fitness' },
-    orderBy: { id: 'asc' },
-  });
-  const menteTemplates = await prisma.questTemplate.findMany({
-    where: { category: 'mente' },
-    orderBy: { id: 'asc' },
-  });
-
-  const pick = <T>(arr: T[], n: number): T[] => {
-    const shuffled = [...arr].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, n);
-  };
-
-  const selected = [
-    ...pick(fitnessTemplates, 2),
-    ...pick(menteTemplates, 2),
-  ];
-
-  const created = await prisma.$transaction(
-    selected.map((t) =>
-      prisma.dailyQuest.create({
-        data: { characterId: character.id, questTemplateId: t.id, date: today },
-        include: { questTemplate: true },
-      })
-    )
-  );
-
-  res.json(created);
 });
 
 router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {

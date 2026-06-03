@@ -50,6 +50,7 @@ interface NutritionState {
   loading: boolean;
   fetchToday: () => Promise<void>;
   searchFoods: (q: string) => Promise<void>;
+  aiParseFood: (description: string) => Promise<{ food: Food; grams: number }>;
   addMealItem: (mealType: MealLog['mealType'], foodId: string, quantity: number) => Promise<void>;
   removeMealItem: (mealId: string, itemId: string) => Promise<void>;
   clearSearch: () => void;
@@ -89,6 +90,11 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     } finally {
       set({ searching: false });
     }
+  },
+
+  aiParseFood: async (description: string) => {
+    const { data } = await api.post<{ food: Food; grams: number }>('/nutrition/ai-parse', { description });
+    return data;
   },
 
   addMealItem: async (mealType, foodId, quantity) => {

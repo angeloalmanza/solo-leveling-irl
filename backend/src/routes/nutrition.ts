@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { searchFoods } from '../services/foodService';
+import { parseFoodWithAI } from '../services/aiService';
 import { applyXP, applyStats } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 
@@ -102,6 +103,41 @@ router.get('/foods/search', requireAuth, async (req, res: Response) => {
   }
   const foods = await searchFoods(q);
   res.json(foods);
+});
+
+router.post('/ai-parse', requireAuth, async (req, res: Response) => {
+  const description = String(req.body?.description ?? '').trim();
+  if (!description) {
+    res.status(400).json({ error: 'description required' });
+    return;
+  }
+
+  try {
+    const parsed = await parseFoodWithAI(description);
+
+    const existing = await prisma.food.findFirst({
+      where: { name: { equals: parsed.name, mode: 'insensitive' }, source: 'ai' },
+    });
+
+    const foodData = {
+      name: parsed.name,
+      calories: Math.round(parsed.caloriesPer100g),
+      protein: Math.round(parsed.proteinPer100g * 10) / 10,
+      carbs: Math.round(parsed.carbsPer100g * 10) / 10,
+      fat: Math.round(parsed.fatPer100g * 10) / 10,
+      fiber: Math.round(parsed.fiberPer100g * 10) / 10,
+      source: 'ai',
+    };
+
+    const food = existing
+      ? await prisma.food.update({ where: { id: existing.id }, data: foodData })
+      : await prisma.food.create({ data: foodData });
+
+    res.json({ food, grams: parsed.grams });
+  } catch (err) {
+    console.error('AI parse error:', err);
+    res.status(503).json({ error: 'AI non disponibile, riprova tra poco.' });
+  }
 });
 
 router.post('/meals', requireAuth, async (req, res: Response) => {
