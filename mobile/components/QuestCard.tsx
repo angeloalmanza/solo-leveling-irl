@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSequence,
   withTiming, withSpring, Easing,
@@ -39,6 +40,7 @@ export function QuestCard({
 
   function handlePress() {
     if (completed || completing) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     scale.value = withSequence(
       withTiming(0.97, { duration: 80 }),
       withSpring(1, { damping: 12 }),

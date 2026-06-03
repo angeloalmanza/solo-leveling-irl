@@ -23,8 +23,7 @@ export const RankColors: Record<string, string> = {
 };
 
 export const Fonts = {
-  regular: 'Rajdhani_400Regular',
-  medium: 'Rajdhani_500Medium',
-  semiBold: 'Rajdhani_600SemiBold',
-  bold: 'Rajdhani_700Bold',
+  regular: 'Orbitron_400Regular',
+  bold: 'Orbitron_700Bold',
+  extraBold: 'Orbitron_800ExtraBold',
 } as const;

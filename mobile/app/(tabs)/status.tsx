@@ -97,17 +97,17 @@ const styles = StyleSheet.create({
   retry: { color: Colors.accent, fontWeight: '700' },
 
   header: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 24 },
-  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginBottom: 20 },
+  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginBottom: 20, fontFamily: 'Orbitron_400Regular' },
 
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
   nameBlock: { flex: 1 },
-  name: { color: Colors.text, fontSize: 26, fontWeight: '800', letterSpacing: 2 },
+  name: { color: Colors.text, fontSize: 22, fontFamily: 'Orbitron_700Bold', letterSpacing: 2 },
   title: { fontSize: 13, fontWeight: '600', marginTop: 4, letterSpacing: 1 },
 
   levelRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 16 },
   levelLabel: { color: Colors.textSecondary, fontSize: 13, letterSpacing: 2 },
-  levelValue: { fontSize: 42, fontWeight: '800', lineHeight: 46 },
-  rankLabel: { color: Colors.textSecondary, fontSize: 11, letterSpacing: 2, marginLeft: 8 },
+  levelValue: { fontSize: 42, fontFamily: 'Orbitron_800ExtraBold', lineHeight: 50 },
+  rankLabel: { color: Colors.textSecondary, fontSize: 10, letterSpacing: 2, marginLeft: 8, fontFamily: 'Orbitron_400Regular' },
 
   divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 24, marginVertical: 8 },
 
