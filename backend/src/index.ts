@@ -4,6 +4,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth';
 import characterRoutes from './routes/character';
 import questRoutes from './routes/quests';
+import nutritionRoutes from './routes/nutrition';
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -18,6 +19,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', authRoutes);
 app.use('/character', characterRoutes);
 app.use('/quests', questRoutes);
+app.use('/nutrition', nutritionRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

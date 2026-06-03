@@ -20,6 +20,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.background } }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="nutrition/search" options={{ presentation: 'modal' }} />
       </Stack>
     </>
   );

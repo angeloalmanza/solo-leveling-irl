@@ -41,8 +41,9 @@ model Character {
   int                 Int                  @default(10)
   vit                 Int                  @default(10)
   end                 Int                  @default(10)
-  activeTitle         String?
-  createdAt           DateTime             @default(now())
+  activeTitle               String?
+  lastNutritionRewardDate   DateTime?            @db.Date
+  createdAt                 DateTime             @default(now())
   dailyQuests         DailyQuest[]
   mealLogs            MealLog[]
   nutritionGoal       NutritionGoal?
