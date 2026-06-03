@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts, Orbitron_400Regular, Orbitron_700Bold, Orbitron_800ExtraBold } from '@expo-google-fonts/orbitron';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../stores/authStore';
-import { setupDailyNotification } from '../lib/notifications';
+// import { setupDailyNotification } from '../lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,7 +20,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (!fontsLoaded && !fontError) return;
     SplashScreen.hideAsync();
-    setupDailyNotification();
+    // setupDailyNotification();
     hydrate().then(() => {
       if (isAuthenticated) router.replace('/(tabs)/status');
     });

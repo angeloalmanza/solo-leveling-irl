@@ -35,6 +35,7 @@ export interface CompleteResult {
   oldRank: string;
   newRank: string;
   newlyUnlocked: { shadows: UnlockItem[]; achievements: UnlockItem[] };
+  undone?: boolean;
 }
 
 interface QuestState {
@@ -66,9 +67,12 @@ export const useQuestStore = create<QuestState>((set, get) => ({
     set({ completing: questId });
     try {
       const { data } = await api.post(`/quests/daily/${questId}/complete`);
+      const completed = !data.undone;
       set((s) => ({
         quests: s.quests.map((q) =>
-          q.id === questId ? { ...q, completed: true, completedAt: new Date().toISOString() } : q
+          q.id === questId
+            ? { ...q, completed, completedAt: completed ? new Date().toISOString() : null }
+            : q
         ),
         lastResult: data,
       }));

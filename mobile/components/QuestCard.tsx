@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSequence,
@@ -40,13 +40,25 @@ export function QuestCard({
 
   function handlePress() {
     if (completed || completing) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    scale.value = withSequence(
-      withTiming(0.97, { duration: 80 }),
-      withSpring(1, { damping: 12 }),
+    Alert.alert(
+      'MISSIONE',
+      'Hai completato questa quest?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Sì',
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            scale.value = withSequence(
+              withTiming(0.97, { duration: 80 }),
+              withSpring(1, { damping: 12 }),
+            );
+            opacity.value = withTiming(0.45, { duration: 400, easing: Easing.out(Easing.quad) });
+            onComplete();
+          },
+        },
+      ],
     );
-    opacity.value = withTiming(0.45, { duration: 400, easing: Easing.out(Easing.quad) });
-    onComplete();
   }
 
   const dots = Array.from({ length: 3 }, (_, i) => (

@@ -52,8 +52,10 @@ export default function QuestsScreen() {
   async function handleComplete(questId: string) {
     try {
       const result = await complete(questId);
-      showBanner();
-      handleModalResult(result);
+      if (!result.undone) {
+        showBanner();
+        handleModalResult(result);
+      }
     } catch { /* handled in store */ }
   }
 

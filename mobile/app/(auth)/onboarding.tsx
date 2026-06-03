@@ -52,8 +52,7 @@ export default function OnboardingScreen() {
   }, []);
 
   async function handleBegin() {
-    await SecureStore.setItemAsync('hasOnboarded', 'true');
-    router.replace('/(auth)/login');
+    router.replace('/(auth)/tutorial');
   }
 
   const sysStyle = useAnimatedStyle(() => ({ opacity: systemOpacity.value }));

@@ -69,7 +69,22 @@ router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
     return;
   }
   if (quest.completed) {
-    res.status(409).json({ error: 'Quest already completed' });
+    // Undo: remove XP and stats
+    const statRewards = quest.questTemplate.statRewards as Record<string, number>;
+    const negativeStats = Object.fromEntries(
+      Object.entries(statRewards).map(([k, v]) => [k, -v])
+    );
+    await applyStats(character.id, negativeStats);
+    await prisma.character.update({
+      where: { id: character.id },
+      data: { xp: { decrement: quest.questTemplate.xpReward } },
+    });
+    await prisma.dailyQuest.update({
+      where: { id: quest.id },
+      data: { completed: false, completedAt: null },
+    });
+    const updatedCharacter = await prisma.character.findUniqueOrThrow({ where: { id: character.id } });
+    res.json({ character: updatedCharacter, leveledUp: false, rankedUp: false, newlyUnlocked: [], undone: true });
     return;
   }
 
