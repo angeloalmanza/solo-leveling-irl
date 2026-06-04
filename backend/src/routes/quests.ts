@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
-import { applyXP, applyStats } from '../services/levelService';
+import { applyXP, applyStats, updateStreak, calcStreakMultiplier } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { generateDailyQuests } from '../services/aiService';
 
@@ -267,6 +267,8 @@ router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
 
   const statRewards = quest.questTemplate.statRewards as Record<string, number>;
   await applyStats(character.id, statRewards);
+
+  const { streak, multiplier } = await updateStreak(character.id);
   const levelResult = await applyXP(character.id, quest.questTemplate.xpReward);
 
   const [updatedCharacter, newlyUnlocked] = await Promise.all([
@@ -274,7 +276,7 @@ router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
     runUnlockCheck(character.id),
   ]);
 
-  res.json({ character: updatedCharacter, ...levelResult, newlyUnlocked });
+  res.json({ character: updatedCharacter, ...levelResult, newlyUnlocked, streak, multiplier });
 });
 
 export default router;

@@ -43,6 +43,9 @@ model Character {
   end                 Int                  @default(10)
   activeTitle               String?
   lastNutritionRewardDate   DateTime?            @db.Date
+  streak                    Int                  @default(0)
+  bestStreak                Int                  @default(0)
+  lastQuestDate             DateTime?            @db.Date
   createdAt                 DateTime             @default(now())
   dailyQuests         DailyQuest[]
   mealLogs            MealLog[]

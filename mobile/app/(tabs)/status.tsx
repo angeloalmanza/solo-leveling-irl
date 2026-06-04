@@ -1,19 +1,34 @@
 import { useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, ActivityIndicator,
+  TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCharacterStore } from '../../stores/characterStore';
+import { useCharacterStore, streakMultiplier } from '../../stores/characterStore';
 import { RankBadge } from '../../components/RankBadge';
 import { XPBar } from '../../components/XPBar';
 import { StatCard } from '../../components/StatCard';
 import { Colors, RankColors } from '../../constants/theme';
 
 export default function StatusScreen() {
-  const { character, loading, fetch } = useCharacterStore();
+  const { character, loading, lastPenalty, fetch, clearPenalty } = useCharacterStore();
 
   useEffect(() => { fetch(); }, []);
+
+  useEffect(() => {
+    if (!lastPenalty) return;
+    const lines = [
+      `Hai saltato ${lastPenalty.daysLost} giorno${lastPenalty.daysLost > 1 ? 'i' : ''} senza completare quest.`,
+      `Hai perso ${lastPenalty.xpLost} XP.`,
+      lastPenalty.levelDown ? `Sei sceso al livello ${lastPenalty.newLevel}.` : '',
+      lastPenalty.rankDown ? `Sei retrocesso di Rank.` : '',
+      '\nLa streak è stata azzerata.',
+    ].filter(Boolean).join('\n');
+
+    Alert.alert('⚠ PENALITÀ INATTIVITÀ', lines, [
+      { text: 'Capito', onPress: clearPenalty },
+    ]);
+  }, [lastPenalty]);
 
   if (loading && !character) {
     return (
@@ -33,13 +48,12 @@ export default function StatusScreen() {
   }
 
   const rankColor = RankColors[character.rank] ?? Colors.accent;
+  const mult = streakMultiplier(character.streak);
+  const hasBonus = mult > 1;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <LinearGradient
-        colors={['#0d1a2e', Colors.background]}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#0d1a2e', Colors.background]} style={styles.header}>
         <Text style={styles.systemLabel}>[ STATUS WINDOW ]</Text>
 
         <View style={styles.nameRow}>
@@ -59,10 +73,26 @@ export default function StatusScreen() {
         </View>
 
         <XPBar xp={character.xp} level={character.level} />
+
+        {/* Streak */}
+        <View style={styles.streakRow}>
+          <Text style={styles.streakIcon}>🔥</Text>
+          <Text style={styles.streakValue}>{character.streak}</Text>
+          <Text style={styles.streakLabel}>
+            {character.streak === 1 ? 'giorno consecutivo' : 'giorni consecutivi'}
+          </Text>
+          {hasBonus && (
+            <View style={styles.multBadge}>
+              <Text style={styles.multText}>×{mult.toFixed(2)} XP</Text>
+            </View>
+          )}
+        </View>
+        {character.bestStreak > 0 && (
+          <Text style={styles.bestStreak}>Record: {character.bestStreak} giorni</Text>
+        )}
       </LinearGradient>
 
       <View style={styles.divider} />
-
       <Text style={styles.sectionLabel}>[ STATISTICS ]</Text>
 
       <View style={styles.statsGrid}>
@@ -77,7 +107,6 @@ export default function StatusScreen() {
           <View style={styles.empty} />
         </View>
       </View>
-
     </ScrollView>
   );
 }
@@ -102,12 +131,21 @@ const styles = StyleSheet.create({
   levelValue: { fontSize: 42, fontFamily: 'Orbitron_800ExtraBold', lineHeight: 50 },
   rankLabel: { color: Colors.textSecondary, fontSize: 10, letterSpacing: 2, marginLeft: 8, fontFamily: 'Orbitron_400Regular' },
 
-  divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 24, marginVertical: 8 },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
+  streakIcon: { fontSize: 20 },
+  streakValue: { color: Colors.text, fontSize: 22, fontFamily: 'Orbitron_700Bold' },
+  streakLabel: { color: Colors.textSecondary, fontSize: 12, flex: 1 },
+  multBadge: {
+    backgroundColor: 'rgba(255,180,0,0.15)', borderWidth: 1,
+    borderColor: '#ffd700', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+  },
+  multText: { color: '#ffd700', fontSize: 11, fontWeight: '800' },
+  bestStreak: { color: Colors.textMuted, fontSize: 11, marginTop: 4, marginLeft: 28 },
 
+  divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 24, marginVertical: 8 },
   sectionLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginHorizontal: 24, marginTop: 16, marginBottom: 12 },
 
   statsGrid: { paddingHorizontal: 24, gap: 10 },
   statsRow: { flexDirection: 'row', gap: 10 },
   empty: { flex: 1 },
-
 });
