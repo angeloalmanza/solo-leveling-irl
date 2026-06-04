@@ -90,15 +90,34 @@ Statistiche:
 - Livello ${level} | Rank ${rank}
 - STR ${str} | AGI ${agi} | INT ${INT} | END ${end} | VIT ${vit}
 
-Regole:
-- 2 missioni category "fitness": esercizi fisici realistici completabili in un giorno (corsa, calistenia, pesi, HIIT, nuoto, sport, ecc.)
-- 2 missioni category "mente": allenamento mentale (studio, lettura, meditazione, journaling, ecc.)
-- Difficoltà (1=facile, 2=medio, 3=difficile): scala con il livello — livello 1-9 usa principalmente 1-2, livello 10-24 usa 1-3, livello 25+ usa 2-3
+REGOLE FONDAMENTALI:
+- 2 missioni category "fitness" + 2 missioni category "mente"
+- Difficoltà (1=facile, 2=medio, 3=difficile): scala con il livello
 - xpReward tra ${xpMin} e ${xpMax}
-- statRewards: chiavi "str","agi","int","end","vit" con valori 1-3 (fitness → str/agi/end, mente → int/end)
+- statRewards: chiavi "str","agi","int","end","vit" con valori 1-3
 - Titoli in italiano, concisi (max 50 caratteri), stile Solo Leveling epico
-- Descrizioni in italiano, precise e motivanti (max 120 caratteri)
-- Varia le missioni ogni giorno — sii creativo
+- Descrizioni in italiano, precise (max 120 caratteri)
+
+VARIETÀ OBBLIGATORIA — le 2 missioni FITNESS devono essere di tipo DIVERSO, scegli da questa lista ruotando ogni giorno:
+• Forza: push-up, trazioni, dip, squat, affondi, stacchi, overhead press con manubri
+• Resistenza/Cardio: corsa, cyclette, nuoto, salto della corda, camminata veloce
+• HIIT / Circuit training: burpees, mountain climber, jumping jack, tabata
+• Core / Stabilità: plank, crunch, leg raise, hollow body, russian twist
+• Flessibilità / Mobilità: stretching, yoga, foam rolling
+• Sport / Attività: basket, calcio, tennis, boxe, arti marziali, arrampicata
+• Corpo libero avanzato: muscle-up, handstand, pistol squat, L-sit
+
+NON generare due missioni di corsa o dello stesso tipo nella stessa giornata.
+NON usare sempre la corsa — è solo una delle tante opzioni.
+
+Le 2 missioni MENTE devono anch'esse essere di tipo diverso tra loro:
+• Studio / Apprendimento: corso online, libro tecnico, lingua straniera
+• Meditazione / Mindfulness: respirazione, body scan, visualizzazione
+• Journaling / Riflessione: diario, obiettivi, gratitudine
+• Creatività: scrittura, disegno, musica, brainstorming
+• Disciplina digitale: no social, focus session, deep work
+• Lettura: saggio, romanzo, articolo long-form
+• Problem solving: puzzle, scacchi, matematica, coding challenge
 
 Rispondi con JSON:
 {
