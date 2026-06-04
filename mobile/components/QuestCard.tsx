@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
@@ -24,12 +24,14 @@ interface Props {
   completed: boolean;
   completing: boolean;
   onComplete: () => void;
+  onReroll: () => Promise<void>;
 }
 
 export function QuestCard({
   title, description, xpReward, statRewards,
-  difficulty, completed, completing, onComplete,
+  difficulty, completed, completing, onComplete, onReroll,
 }: Props) {
+  const [rerolling, setRerolling] = useState(false);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(completed ? 0.45 : 1);
 
@@ -55,6 +57,23 @@ export function QuestCard({
             );
             opacity.value = withTiming(0.45, { duration: 400, easing: Easing.out(Easing.quad) });
             onComplete();
+          },
+        },
+      ],
+    );
+  }
+
+  function handleReroll() {
+    Alert.alert(
+      'CAMBIA MISSIONE',
+      'Vuoi sostituire questa quest con una nuova generata dall\'AI?',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        {
+          text: 'Cambia',
+          onPress: async () => {
+            setRerolling(true);
+            try { await onReroll(); } finally { setRerolling(false); }
           },
         },
       ],
@@ -94,9 +113,23 @@ export function QuestCard({
         </View>
 
         <View style={styles.body}>
-          <Text style={[styles.title, completed && styles.titleDone]} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, completed && styles.titleDone]} numberOfLines={1}>
+              {title}
+            </Text>
+            {!completed && (
+              <TouchableOpacity
+                style={styles.rerollBtn}
+                onPress={handleReroll}
+                disabled={rerolling || completing}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {rerolling
+                  ? <ActivityIndicator size={12} color={Colors.textMuted} />
+                  : <Text style={styles.rerollIcon}>↻</Text>}
+              </TouchableOpacity>
+            )}
+          </View>
           <Text style={styles.description} numberOfLines={2}>{description}</Text>
           <View style={styles.footer}>
             <Text style={styles.xp}>+{xpReward} XP</Text>
@@ -134,8 +167,11 @@ const styles = StyleSheet.create({
   checkboxDone: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   checkmark: { color: Colors.background, fontSize: 13, fontWeight: '800' },
   body: { flex: 1, gap: 4 },
-  title: { color: Colors.text, fontSize: 15, fontWeight: '700' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { color: Colors.text, fontSize: 15, fontWeight: '700', flex: 1 },
   titleDone: { color: Colors.textMuted, textDecorationLine: 'line-through' },
+  rerollBtn: { paddingLeft: 8 },
+  rerollIcon: { color: Colors.textMuted, fontSize: 18 },
   description: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16 },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' },
   xp: { color: Colors.accent, fontSize: 12, fontWeight: '700' },

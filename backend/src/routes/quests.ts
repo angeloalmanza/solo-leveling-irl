@@ -170,6 +170,63 @@ router.post('/daily/refresh', requireAuth, async (req, res: Response) => {
   }
 });
 
+router.post('/daily/:id/reroll', requireAuth, async (req, res: Response) => {
+  try {
+    const userId = (req as AuthRequest).userId;
+    const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+
+    const quest = await prisma.dailyQuest.findFirst({
+      where: { id: req.params.id, characterId: character.id },
+      include: { questTemplate: true },
+    });
+
+    if (!quest) { res.status(404).json({ error: 'Quest not found' }); return; }
+    if (quest.completed) { res.status(400).json({ error: 'Quest già completata' }); return; }
+
+    const category = quest.questTemplate.category;
+    await prisma.dailyQuest.delete({ where: { id: quest.id } });
+
+    let newQuest = null;
+    try {
+      const aiQuests = await generateDailyQuests({
+        level: character.level, rank: character.rank,
+        str: character.str, agi: character.agi, int: character.int,
+        end: character.end, vit: character.vit,
+      });
+      newQuest = aiQuests.find((q) => q.category === category) ?? aiQuests[0];
+    } catch (err) {
+      console.error('AI reroll failed:', err);
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let template;
+    if (newQuest) {
+      template = await prisma.questTemplate.create({
+        data: {
+          title: newQuest.title, description: newQuest.description,
+          category: category, xpReward: newQuest.xpReward,
+          statRewards: newQuest.statRewards, difficulty: newQuest.difficulty,
+        },
+      });
+    } else {
+      const fallbacks = await prisma.questTemplate.findMany({ where: { category } });
+      template = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+
+    const created = await prisma.dailyQuest.create({
+      data: { characterId: character.id, questTemplateId: template.id, date: today },
+      include: { questTemplate: true },
+    });
+
+    res.json(created);
+  } catch (err) {
+    console.error('Reroll quest error:', err);
+    res.status(500).json({ error: 'Errore nel reroll' });
+  }
+});
+
 router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });

@@ -46,6 +46,7 @@ interface QuestState {
   lastResult: CompleteResult | null;
   fetch: () => Promise<void>;
   refresh: () => Promise<void>;
+  reroll: (questId: string) => Promise<void>;
   complete: (questId: string) => Promise<CompleteResult>;
 }
 
@@ -74,6 +75,13 @@ export const useQuestStore = create<QuestState>((set, get) => ({
     } finally {
       set({ refreshing: false });
     }
+  },
+
+  reroll: async (questId: string) => {
+    const { data } = await api.post<DailyQuest>(`/quests/daily/${questId}/reroll`);
+    set((s) => ({
+      quests: s.quests.map((q) => (q.id === questId ? data : q)),
+    }));
   },
 
   complete: async (questId) => {

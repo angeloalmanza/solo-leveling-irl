@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  RefreshControl, Animated, TouchableOpacity, Alert,
+  RefreshControl, Animated,
 } from 'react-native';
 import { useQuestStore, DailyQuest, CompleteResult } from '../../stores/questStore';
 import { QuestCard } from '../../components/QuestCard';
@@ -16,7 +16,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function QuestsScreen() {
-  const { quests, loading, refreshing, completing, fetch, refresh, complete } = useQuestStore();
+  const { quests, loading, completing, fetch, reroll, complete } = useQuestStore();
   const [bannerVisible, setBannerVisible] = useState(false);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
 
@@ -81,25 +81,7 @@ export default function QuestsScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={fetch} tintColor={Colors.accent} />}
       >
-        <View style={styles.header}>
-          <Text style={styles.systemLabel}>[ DAILY QUESTS ]</Text>
-          <TouchableOpacity
-            style={styles.refreshBtn}
-            onPress={() =>
-              Alert.alert(
-                'CAMBIA MISSIONI',
-                'Vuoi sostituire le quest non completate con nuove missioni generate dall\'AI?',
-                [
-                  { text: 'Annulla', style: 'cancel' },
-                  { text: 'Sì, cambia', onPress: refresh },
-                ],
-              )
-            }
-            disabled={refreshing}
-          >
-            <Text style={[styles.refreshIcon, refreshing && { opacity: 0.4 }]}>↻</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.systemLabel}>[ DAILY QUESTS ]</Text>
         <View style={styles.progressRow}>
           <Text style={styles.progressText}>{completedCount}/{totalCount} completate</Text>
           <View style={styles.progressTrack}>
@@ -122,6 +104,7 @@ export default function QuestsScreen() {
                 completed={quest.completed}
                 completing={completing === quest.id}
                 onComplete={() => handleComplete(quest.id)}
+                onReroll={() => reroll(quest.id)}
               />
             ))}
           </View>
@@ -178,10 +161,7 @@ const styles = StyleSheet.create({
   },
   bannerText: { color: Colors.background, fontSize: 13, fontWeight: '800', letterSpacing: 4 },
 
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4 },
-  refreshBtn: { padding: 6 },
-  refreshIcon: { color: Colors.accent, fontSize: 22 },
+  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginBottom: 14 },
 
   progressRow: { gap: 8, marginBottom: 28 },
   progressText: { color: Colors.textSecondary, fontSize: 12 },
