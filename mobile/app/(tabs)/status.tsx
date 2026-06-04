@@ -4,7 +4,6 @@ import {
   TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuthStore } from '../../stores/authStore';
 import { useCharacterStore } from '../../stores/characterStore';
 import { RankBadge } from '../../components/RankBadge';
 import { XPBar } from '../../components/XPBar';
@@ -12,7 +11,6 @@ import { StatCard } from '../../components/StatCard';
 import { Colors, RankColors } from '../../constants/theme';
 
 export default function StatusScreen() {
-  const logout = useAuthStore((s) => s.logout);
   const { character, loading, fetch } = useCharacterStore();
 
   useEffect(() => { fetch(); }, []);
@@ -80,11 +78,6 @@ export default function StatusScreen() {
         </View>
       </View>
 
-      <View style={styles.divider} />
-
-      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-        <Text style={styles.logoutText}>DISCONNETTI</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -117,6 +110,4 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', gap: 10 },
   empty: { flex: 1 },
 
-  logoutBtn: { marginHorizontal: 24, marginTop: 32, paddingVertical: 14, borderWidth: 1, borderColor: Colors.border, borderRadius: 6, alignItems: 'center' },
-  logoutText: { color: Colors.textMuted, fontSize: 11, letterSpacing: 3 },
 });
