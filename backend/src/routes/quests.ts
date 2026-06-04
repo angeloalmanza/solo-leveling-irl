@@ -92,6 +92,84 @@ router.get('/daily', requireAuth, async (req, res: Response) => {
   }
 });
 
+router.post('/daily/refresh', requireAuth, async (req, res: Response) => {
+  try {
+    const userId = (req as AuthRequest).userId;
+    const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayQuests = await prisma.dailyQuest.findMany({
+      where: { characterId: character.id, date: today },
+      include: { questTemplate: true },
+    });
+
+    const completed = todayQuests.filter((q) => q.completed);
+    const fitnessCompleted = completed.filter((q) => q.questTemplate.category === 'fitness').length;
+    const menteCompleted = completed.filter((q) => q.questTemplate.category === 'mente').length;
+    const fitnessNeeded = Math.max(0, 2 - fitnessCompleted);
+    const menteNeeded = Math.max(0, 2 - menteCompleted);
+
+    await prisma.dailyQuest.deleteMany({
+      where: { characterId: character.id, date: today, completed: false },
+    });
+
+    if (fitnessNeeded === 0 && menteNeeded === 0) {
+      res.json(completed);
+      return;
+    }
+
+    let aiQuests = null;
+    try {
+      aiQuests = await generateDailyQuests({
+        level: character.level, rank: character.rank,
+        str: character.str, agi: character.agi, int: character.int,
+        end: character.end, vit: character.vit,
+      });
+    } catch (err) {
+      console.error('AI quest generation failed on refresh:', err);
+    }
+
+    const newDailyQuests: typeof todayQuests = [];
+
+    if (aiQuests) {
+      const newFitness = aiQuests.filter((q) => q.category === 'fitness').slice(0, fitnessNeeded);
+      const newMente = aiQuests.filter((q) => q.category === 'mente').slice(0, menteNeeded);
+      for (const q of [...newFitness, ...newMente]) {
+        const template = await prisma.questTemplate.create({
+          data: {
+            title: q.title, description: q.description,
+            category: q.category as 'fitness' | 'mente',
+            xpReward: q.xpReward, statRewards: q.statRewards, difficulty: q.difficulty,
+          },
+        });
+        const dq = await prisma.dailyQuest.create({
+          data: { characterId: character.id, questTemplateId: template.id, date: today },
+          include: { questTemplate: true },
+        });
+        newDailyQuests.push(dq);
+      }
+    } else {
+      const pick = <T>(arr: T[], n: number): T[] => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
+      const ft = await prisma.questTemplate.findMany({ where: { category: 'fitness' } });
+      const mt = await prisma.questTemplate.findMany({ where: { category: 'mente' } });
+      for (const t of [...pick(ft, fitnessNeeded), ...pick(mt, menteNeeded)]) {
+        const dq = await prisma.dailyQuest.create({
+          data: { characterId: character.id, questTemplateId: t.id, date: today },
+          include: { questTemplate: true },
+        });
+        newDailyQuests.push(dq);
+      }
+    }
+
+    res.json([...completed, ...newDailyQuests]);
+  } catch (err) {
+    console.error('Refresh quests error:', err);
+    res.status(500).json({ error: 'Errore nel refresh delle quest' });
+  }
+});
+
 router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });

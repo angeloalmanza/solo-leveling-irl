@@ -41,15 +41,18 @@ export interface CompleteResult {
 interface QuestState {
   quests: DailyQuest[];
   loading: boolean;
+  refreshing: boolean;
   completing: string | null;
   lastResult: CompleteResult | null;
   fetch: () => Promise<void>;
+  refresh: () => Promise<void>;
   complete: (questId: string) => Promise<CompleteResult>;
 }
 
 export const useQuestStore = create<QuestState>((set, get) => ({
   quests: [],
   loading: false,
+  refreshing: false,
   completing: null,
   lastResult: null,
 
@@ -60,6 +63,16 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       set({ quests: data });
     } finally {
       set({ loading: false });
+    }
+  },
+
+  refresh: async () => {
+    set({ refreshing: true });
+    try {
+      const { data } = await api.post<DailyQuest[]>('/quests/daily/refresh');
+      set({ quests: data });
+    } finally {
+      set({ refreshing: false });
     }
   },
 
