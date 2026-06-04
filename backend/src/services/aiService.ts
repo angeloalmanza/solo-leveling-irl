@@ -92,11 +92,28 @@ Statistiche:
 
 REGOLE FONDAMENTALI:
 - 2 missioni category "fitness" + 2 missioni category "mente"
-- Difficoltà (1=facile, 2=medio, 3=difficile): scala con il livello
-- xpReward tra ${xpMin} e ${xpMax}
-- statRewards: chiavi "str","agi","int","end","vit" con valori 1-3
 - Titoli in italiano, concisi (max 50 caratteri), stile Solo Leveling epico
 - Descrizioni in italiano, precise (max 120 caratteri)
+- xpReward tra ${xpMin} e ${xpMax}
+- statRewards: chiavi "str","agi","int","end","vit" con valori 1-3
+
+SCALA DI DIFFICOLTÀ IN BASE AL LIVELLO ${level}:
+${level <= 9 ? `Livello 1-9 (RANK E — Principiante):
+  • difficulty: 1 per entrambe le fitness
+  • Esercizi leggeri: 10-15 push-up, 20 squat, 10 min corsa, 20 min studio, 5 min meditazione
+  • xpReward: ${xpMin}-${Math.round(xpMin * 1.3)}` : ''}
+${level >= 10 && level <= 24 ? `Livello 10-24 (RANK D — Intermedio):
+  • difficulty: 1-2, almeno una fitness a 2
+  • Esercizi moderati: 25-30 push-up, 50 squat, 20 min corsa, 3 serie circuit, 30 min studio
+  • xpReward: ${xpMin}-${Math.round(xpMin * 1.5)}` : ''}
+${level >= 25 && level <= 49 ? `Livello 25-49 (RANK C/B — Avanzato):
+  • difficulty: 2-3, almeno una fitness a 3
+  • Esercizi intensi: 50 push-up, 100 squat, HIIT 20 min, trazioni, 45 min studio concentrato
+  • xpReward: ${xpMin}-${Math.round(xpMin * 1.8)}` : ''}
+${level >= 50 ? `Livello 50+ (RANK A/S — Elite):
+  • difficulty: 3 per tutte le missioni
+  • Esercizi da atleta: 100 push-up, muscle-up, corsa 10km, HIIT estremo, 2h studio, meditazione avanzata
+  • xpReward: ${xpMin}-${xpMax}` : ''}
 
 VARIETÀ OBBLIGATORIA — le 2 missioni FITNESS devono essere di tipo DIVERSO, scegli da questa lista ruotando ogni giorno:
 • Forza: push-up, trazioni, dip, squat, affondi, stacchi, overhead press con manubri
