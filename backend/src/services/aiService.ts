@@ -32,33 +32,35 @@ export interface WeeklySummaryData {
 }
 
 export async function generateWeeklySummary(data: WeeklySummaryData): Promise<string> {
+  const statsText = Object.entries(data.statsGained).length > 0
+    ? Object.entries(data.statsGained).map(([k, v]) => `${k.toUpperCase()} aumentato di ${v}`).join(', ')
+    : 'nessuna statistica aumentata';
+
   const content = await groqChat([
     {
       role: 'system',
-      content:
-        'Sei il Sistema di Solo Leveling. Scrivi rapporti settimanali in italiano epici e motivazionali in stile Solo Leveling. Rispondi SOLO con testo narrativo, senza JSON.',
+      content: `Sei la voce del Sistema di Solo Leveling. Parli direttamente al Hunter in seconda persona, con tono epico e drammatico in italiano.
+Scrivi SOLO testo narrativo puro: niente JSON, niente liste puntate, niente parentesi graffe, niente placeholder, niente markdown, niente asterischi. Solo paragrafi di testo normale.`,
     },
     {
       role: 'user',
-      content: `Scrivi un rapporto settimanale per questo Hunter.
+      content: `Scrivi il rapporto settimanale per il Hunter di Rank ${data.rank}, Livello ${data.level}.
 
-Dati della settimana:
-- Quest completate: ${data.questsCompleted}/${data.questsTotal}
-- XP guadagnata: ${data.xpGained}
-- Stat aumentate: ${Object.entries(data.statsGained).map(([k, v]) => `${k.toUpperCase()} +${v}`).join(', ') || 'nessuna'}
-- Streak attuale: ${data.streak} giorni consecutivi
-- Boss settimanale sconfitto: ${data.bossDefeated ? 'SÌ' : 'NO'}
-- Obiettivi nutrizionali raggiunti: ${data.nutritionDaysOk}/7 giorni
-- Livello attuale: ${data.level} | Rank: ${data.rank}
+Questa settimana il Hunter ha:
+— Completato ${data.questsCompleted} quest su ${data.questsTotal} disponibili
+— Guadagnato circa ${data.xpGained} punti esperienza
+— Migliorato le seguenti statistiche: ${statsText}
+— Mantenuto una streak di ${data.streak} giorni consecutivi
+— ${data.bossDefeated ? 'Sconfitto il Boss Settimanale' : 'Non sconfitto il Boss Settimanale'}
+— Rispettato gli obiettivi nutrizionali per ${data.nutritionDaysOk} giorni su 7
 
-Scrivi un rapporto in italiano di 3-5 paragrafi in stile Solo Leveling:
-- Apertura epica tipo "RAPPORTO DI SISTEMA — SETTIMANA [X]"
-- Analisi dei progressi con tono drammatico
-- Punti di forza della settimana
-- Aree di miglioramento (senza essere troppo critico)
-- Chiusura motivazionale epica
+Scrivi 4 paragrafi in stile Solo Leveling:
+1. Apertura con "RAPPORTO DI SISTEMA" e valutazione drammatica della settimana
+2. Analisi dei progressi ottenuti, citando i numeri reali in modo narrativo
+3. Punto di forza principale e punto da migliorare
+4. Chiusura motivazionale che spinge il Hunter verso la settimana successiva
 
-Usa solo testo narrativo, nessun JSON, nessuna lista puntata.`,
+IMPORTANTE: scrivi solo testo, niente simboli speciali, niente parentesi, niente variabili.`,
     },
   ]);
 

@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateWeeklySummary } from '../services/aiService';
 
-const summaryCache = new Map<string, { summary: string; generatedAt: Date }>();
+const summaryCache = new Map<string, { summary: string; generatedAt: Date; date: string }>();
 
 const router = Router();
 
@@ -150,7 +150,7 @@ router.get('/weekly-summary', requireAuth, async (req, res: Response) => {
     rank: char.rank,
   });
 
-  const result = { summary, generatedAt: new Date() };
+  const result = { summary, generatedAt: new Date(), date: todayKey };
   summaryCache.set(cacheKey, result);
   res.json(result);
 });
