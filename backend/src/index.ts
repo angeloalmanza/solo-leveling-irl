@@ -10,6 +10,7 @@ import unlockRoutes from './routes/unlocks';
 import bossRoutes from './routes/boss';
 import progressRoutes from './routes/progress';
 import bodyRoutes from './routes/body';
+import skillsRoutes from './routes/skills';
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -29,6 +30,7 @@ app.use('/unlocks', unlockRoutes);
 app.use('/boss', bossRoutes);
 app.use('/progress', progressRoutes);
 app.use('/body', bodyRoutes);
+app.use('/skills', skillsRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

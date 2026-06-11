@@ -179,6 +179,67 @@ export interface AIWeeklyBoss {
   tasks: AIBossTask[];
 }
 
+export interface AISkill {
+  name: string;
+  description: string;
+  type: 'passive' | 'active';
+  unlockLevel: number;
+  statBonus: Record<string, number>;
+  parentSkillName: string | null;
+}
+
+export async function generateSkillTree(character: {
+  level: number;
+  rank: string;
+  str: number;
+  agi: number;
+  int: number;
+  end: number;
+  vit: number;
+}): Promise<AISkill[]> {
+  const dominant = Object.entries({ str: character.str, agi: character.agi, int: character.int, end: character.end, vit: character.vit })
+    .sort(([, a], [, b]) => b - a)[0][0];
+
+  const content = await groqChat([
+    {
+      role: 'system',
+      content: 'Sei il Sistema di Solo Leveling. Generi alberi di abilità per Hunter. Rispondi SOLO con JSON valido.',
+    },
+    {
+      role: 'user',
+      content: `Genera un albero di abilità per questo Hunter di Rank ${character.rank}, Livello ${character.level}.
+Stat dominante: ${dominant.toUpperCase()} (${character[dominant as keyof typeof character]})
+
+REGOLE:
+- Genera esattamente 12 skill in italiano, ispirate a Solo Leveling
+- Struttura ad albero: 3 skill radice (parentSkillName null), poi branch da esse
+- Le skill radice coprono i 3 aspetti principali del personaggio
+- type: "passive" per bonus permanenti, "active" per abilità attivabili
+- unlockLevel: livelli realistici basati su livello ${character.level} del personaggio (root = livello attuale o poco sopra, rami = progressivamente più alti)
+- statBonus: JSON con chiavi str/agi/int/end/vit, valori 1-4 per le passive, 0 per le active
+- parentSkillName: nome ESATTO di una skill già nella lista (per i figli), null per le radici
+
+Rispondi con JSON:
+{
+  "skills": [
+    {"name":"string","description":"string (max 80 caratteri)","type":"passive","unlockLevel":${character.level},"statBonus":{"str":2},"parentSkillName":null},
+    ...
+  ]
+}`,
+    },
+  ]);
+
+  const raw = JSON.parse(content) as { skills: AISkill[] };
+  return (raw.skills ?? []).slice(0, 15).map((s) => ({
+    name: String(s.name ?? '').slice(0, 60),
+    description: String(s.description ?? '').slice(0, 120),
+    type: s.type === 'active' ? 'active' : 'passive',
+    unlockLevel: Math.max(1, Math.round(Number(s.unlockLevel) || character.level)),
+    statBonus: typeof s.statBonus === 'object' && s.statBonus !== null ? s.statBonus : {},
+    parentSkillName: s.parentSkillName ? String(s.parentSkillName).slice(0, 60) : null,
+  }));
+}
+
 export async function generateWeeklyBoss(character: {
   level: number;
   rank: string;

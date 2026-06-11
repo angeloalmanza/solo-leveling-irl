@@ -53,6 +53,10 @@ export default function TabsLayout() {
         name="achievements"
         options={{ title: 'TITLES', tabBarIcon: tabIcon('trophy', 'trophy-outline') }}
       />
+      <Tabs.Screen
+        name="skills"
+        options={{ title: 'SKILLS', tabBarIcon: tabIcon('git-branch', 'git-branch-outline') }}
+      />
     </Tabs>
   );
 }

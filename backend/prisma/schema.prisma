@@ -56,6 +56,7 @@ model Character {
   statSnapshots       StatSnapshot[]
   bodyLogs            BodyLog[]
   savedMeals          SavedMeal[]
+  unlockedSkills      UnlockedSkill[]
 }
 
 model QuestTemplate {
@@ -192,6 +193,35 @@ enum Rank {
 enum QuestCategory {
   fitness
   mente
+}
+
+model Skill {
+  id            String          @id @default(cuid())
+  name          String
+  description   String
+  type          SkillType
+  unlockLevel   Int
+  statBonus     Json
+  parentSkillId String?
+  parentSkill   Skill?          @relation("SkillTree", fields: [parentSkillId], references: [id])
+  children      Skill[]         @relation("SkillTree")
+  unlockedBy    UnlockedSkill[]
+}
+
+model UnlockedSkill {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  skillId     String
+  skill       Skill     @relation(fields: [skillId], references: [id])
+  unlockedAt  DateTime  @default(now())
+
+  @@unique([characterId, skillId])
+}
+
+enum SkillType {
+  passive
+  active
 }
 
 enum MealType {
