@@ -16,6 +16,10 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
 
+// API dinamica e per-utente: niente ETag/304 condizionali (il client okhttp
+// poteva ricevere 304 con body vuoto e svuotare lo store).
+app.set('etag', false);
+
 app.use(pinoHttp({ logger }));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
