@@ -19,6 +19,52 @@ export interface AIQuest {
   difficulty: number;
 }
 
+export interface WeeklySummaryData {
+  questsCompleted: number;
+  questsTotal: number;
+  xpGained: number;
+  statsGained: Record<string, number>;
+  streak: number;
+  bossDefeated: boolean;
+  nutritionDaysOk: number;
+  level: number;
+  rank: string;
+}
+
+export async function generateWeeklySummary(data: WeeklySummaryData): Promise<string> {
+  const content = await groqChat([
+    {
+      role: 'system',
+      content:
+        'Sei il Sistema di Solo Leveling. Scrivi rapporti settimanali in italiano epici e motivazionali in stile Solo Leveling. Rispondi SOLO con testo narrativo, senza JSON.',
+    },
+    {
+      role: 'user',
+      content: `Scrivi un rapporto settimanale per questo Hunter.
+
+Dati della settimana:
+- Quest completate: ${data.questsCompleted}/${data.questsTotal}
+- XP guadagnata: ${data.xpGained}
+- Stat aumentate: ${Object.entries(data.statsGained).map(([k, v]) => `${k.toUpperCase()} +${v}`).join(', ') || 'nessuna'}
+- Streak attuale: ${data.streak} giorni consecutivi
+- Boss settimanale sconfitto: ${data.bossDefeated ? 'SÌ' : 'NO'}
+- Obiettivi nutrizionali raggiunti: ${data.nutritionDaysOk}/7 giorni
+- Livello attuale: ${data.level} | Rank: ${data.rank}
+
+Scrivi un rapporto in italiano di 3-5 paragrafi in stile Solo Leveling:
+- Apertura epica tipo "RAPPORTO DI SISTEMA — SETTIMANA [X]"
+- Analisi dei progressi con tono drammatico
+- Punti di forza della settimana
+- Aree di miglioramento (senza essere troppo critico)
+- Chiusura motivazionale epica
+
+Usa solo testo narrativo, nessun JSON, nessuna lista puntata.`,
+    },
+  ]);
+
+  return content;
+}
+
 export async function parseFoodWithAI(description: string): Promise<ParsedFood> {
   const content = await groqChat([
     {

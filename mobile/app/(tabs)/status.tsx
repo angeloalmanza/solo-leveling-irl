@@ -96,6 +96,10 @@ export default function StatusScreen() {
       <View style={styles.divider} />
       <Text style={styles.sectionLabel}>[ STATISTICS ]</Text>
 
+      <TouchableOpacity style={styles.summaryBtn} onPress={() => router.push('/weekly-summary')}>
+        <Text style={styles.summaryBtnText}>[ RIEPILOGO SETTIMANA ]</Text>
+      </TouchableOpacity>
+
       <View style={styles.btnRow}>
         <TouchableOpacity style={styles.halfBtn} onPress={() => router.push('/progress')}>
           <Text style={styles.halfBtnText}>[ PROGRESSI ]</Text>
@@ -154,6 +158,9 @@ const styles = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 24, marginVertical: 8 },
   sectionLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginHorizontal: 24, marginTop: 16, marginBottom: 12 },
+
+  summaryBtn: { marginHorizontal: 24, marginBottom: 10, borderWidth: 1, borderColor: Colors.warning, borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
+  summaryBtnText: { color: Colors.warning, fontSize: 10, letterSpacing: 3 },
 
   btnRow: { flexDirection: 'row', marginHorizontal: 24, marginBottom: 16, gap: 10 },
   halfBtn: { flex: 1, borderWidth: 1, borderColor: Colors.accent, borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
