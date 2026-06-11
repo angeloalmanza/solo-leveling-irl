@@ -102,7 +102,7 @@ export default function ProgressScreen() {
   useEffect(() => { load(year, month); }, [year, month]);
 
   const markedDates = calData.reduce<Record<string, object>>((acc, d) => {
-    let dotColor = Colors.textMuted;
+    let dotColor: string = Colors.textMuted;
     if (d.completed > 0 && d.completed < d.total) dotColor = Colors.warning;
     else if (d.completed === d.total && d.total > 0) dotColor = Colors.success;
     acc[d.date] = { marked: true, dotColor };
