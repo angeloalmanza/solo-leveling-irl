@@ -1,50 +1,37 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, ActivityIndicator, Alert, Dimensions,
+  TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
-import Svg, { Line as SvgLine } from 'react-native-svg';
 import { useSkillStore, Skill } from '../../stores/skillStore';
 import { useCharacterStore } from '../../stores/characterStore';
 import { Colors, RankColors } from '../../constants/theme';
 
-const SCREEN_W = Dimensions.get('window').width;
-const NODE_W = (SCREEN_W - 48 - 12) / 2;
-const NODE_H = 110;
-const COL_GAP = 12;
-const ROW_GAP = 44;
+const INDENT = 22;
 
-type SkillNode = Skill & { depth: number; col: number };
+type SkillNode = Skill & { depth: number };
 
-function buildLayout(skills: Skill[]): SkillNode[] {
-  const idToSkill = new Map(skills.map((s) => [s.id, s]));
+/** Appiattisce l'albero in ordine DFS (genitore poi figli), con la profondità. */
+function flattenTree(skills: Skill[]): SkillNode[] {
   const roots = skills.filter((s) => !s.parentSkillId);
   const result: SkillNode[] = [];
-
-  function place(skill: Skill, depth: number, col: number) {
-    result.push({ ...skill, depth, col });
-    const children = skills.filter((s) => s.parentSkillId === skill.id);
-    children.forEach((child, i) => place(child, depth + 1, i));
+  function visit(skill: Skill, depth: number) {
+    result.push({ ...skill, depth });
+    skills
+      .filter((s) => s.parentSkillId === skill.id)
+      .forEach((child) => visit(child, depth + 1));
   }
-
-  roots.forEach((root, i) => place(root, 0, i));
+  roots.forEach((root) => visit(root, 0));
   return result;
 }
 
-function groupByDepth(nodes: SkillNode[]): SkillNode[][] {
-  const map = new Map<number, SkillNode[]>();
-  for (const n of nodes) {
-    if (!map.has(n.depth)) map.set(n.depth, []);
-    map.get(n.depth)!.push(n);
-  }
-  return Array.from(map.entries()).sort(([a], [b]) => a - b).map(([, v]) => v);
-}
-
 function statBonusText(bonus: Record<string, number>) {
-  return Object.entries(bonus)
-    .filter(([, v]) => v > 0)
-    .map(([k, v]) => `${k.toUpperCase()} +${v}`)
-    .join(' · ') || '';
+  return (
+    Object.entries(bonus)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `${k.toUpperCase()} +${v}`)
+      .join(' · ') || ''
+  );
 }
 
 export default function SkillsScreen() {
@@ -52,22 +39,11 @@ export default function SkillsScreen() {
   const { character } = useCharacterStore();
   const rankColor = RankColors[character?.rank ?? 'E'] ?? Colors.accent;
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => {
+    fetch();
+  }, []);
 
-  const nodes = buildLayout(skills);
-  const rows = groupByDepth(nodes);
-
-  // Per calcolare le posizioni dei nodi per le linee SVG
-  const nodePositions = new Map<string, { x: number; y: number }>();
-  let currentY = 0;
-  for (const row of rows) {
-    row.forEach((node, idx) => {
-      const x = 24 + idx * (NODE_W + COL_GAP) + NODE_W / 2;
-      nodePositions.set(node.id, { x, y: currentY + NODE_H / 2 });
-    });
-    currentY += NODE_H + ROW_GAP;
-  }
-  const totalH = currentY;
+  const nodes = flattenTree(skills);
 
   function handleUnlock(skill: Skill) {
     if (skill.unlocked) return;
@@ -84,7 +60,11 @@ export default function SkillsScreen() {
     }
     Alert.alert(
       'SBLOCCA SKILL',
-      `Vuoi sbloccare "${skill.name}"?${skill.type === 'passive' && Object.keys(skill.statBonus).length > 0 ? `\n\nBonus: ${statBonusText(skill.statBonus)}` : ''}`,
+      `Vuoi sbloccare "${skill.name}"?${
+        skill.type === 'passive' && Object.keys(skill.statBonus).length > 0
+          ? `\n\nBonus: ${statBonusText(skill.statBonus)}`
+          : ''
+      }`,
       [
         { text: 'Annulla', style: 'cancel' },
         { text: 'SBLOCCA', onPress: () => unlock(skill.id) },
@@ -110,113 +90,134 @@ export default function SkillsScreen() {
         </Text>
       )}
 
-      <View style={{ height: totalH, position: 'relative' }}>
-        {/* Linee SVG connettori */}
-        <Svg style={StyleSheet.absoluteFill} width={SCREEN_W} height={totalH}>
-          {nodes.map((node) => {
-            if (!node.parentSkillId) return null;
-            const from = nodePositions.get(node.parentSkillId);
-            const to = nodePositions.get(node.id);
-            if (!from || !to) return null;
-            return (
-              <SvgLine
-                key={`line-${node.id}`}
-                x1={from.x} y1={from.y + NODE_H / 2}
-                x2={to.x} y2={to.y - NODE_H / 2}
-                stroke={node.unlocked ? rankColor : Colors.border}
-                strokeWidth="2"
-                strokeDasharray={node.unlocked ? undefined : '4,4'}
-              />
-            );
-          })}
-        </Svg>
+      {nodes.map((node) => {
+        const canUnlock =
+          !node.unlocked &&
+          !!character &&
+          character.level >= node.unlockLevel &&
+          (!node.parentSkillId || skills.find((s) => s.id === node.parentSkillId)?.unlocked);
+        const isUnlocking = unlocking === node.id;
 
-        {/* Nodi skill per riga */}
-        {rows.map((row, rowIdx) => {
-          let rowTop = 0;
-          for (let i = 0; i < rowIdx; i++) rowTop += NODE_H + ROW_GAP;
-          return (
-            <View key={rowIdx} style={[styles.row, { top: rowTop }]}>
-              {row.map((node) => {
-                const canUnlock = !node.unlocked && !!character && character.level >= node.unlockLevel &&
-                  (!node.parentSkillId || skills.find((s) => s.id === node.parentSkillId)?.unlocked);
-                const isUnlocking = unlocking === node.id;
+        return (
+          <View key={node.id} style={[styles.nodeRow, { paddingLeft: node.depth * INDENT }]}>
+            {/* Guide verticali per i livelli di annidamento */}
+            {Array.from({ length: node.depth }).map((_, i) => (
+              <View key={i} style={[styles.guide, { left: i * INDENT + 10 }]} />
+            ))}
+            {/* Connettore orizzontale verso la card (per i figli) */}
+            {node.depth > 0 && (
+              <View style={[styles.elbow, { left: (node.depth - 1) * INDENT + 10 }]} />
+            )}
 
-                return (
-                  <TouchableOpacity
-                    key={node.id}
-                    style={[
-                      styles.node,
-                      node.unlocked && { borderColor: rankColor, backgroundColor: `${rankColor}18` },
-                      canUnlock && styles.nodeCanUnlock,
-                      !node.unlocked && !canUnlock && styles.nodeLocked,
-                    ]}
-                    onPress={() => handleUnlock(node)}
-                    activeOpacity={node.unlocked ? 1 : 0.7}
-                  >
-                    {isUnlocking ? (
-                      <ActivityIndicator color={rankColor} size="small" />
+            <TouchableOpacity
+              style={[
+                styles.node,
+                node.unlocked && { borderColor: rankColor, backgroundColor: `${rankColor}18` },
+                canUnlock && styles.nodeCanUnlock,
+                !node.unlocked && !canUnlock && styles.nodeLocked,
+              ]}
+              onPress={() => handleUnlock(node)}
+              activeOpacity={node.unlocked ? 1 : 0.7}
+            >
+              {isUnlocking ? (
+                <ActivityIndicator color={rankColor} size="small" />
+              ) : (
+                <>
+                  <View style={styles.nodeHeader}>
+                    <Text
+                      style={[
+                        styles.nodeType,
+                        { color: node.type === 'passive' ? Colors.accent : Colors.warning },
+                      ]}
+                    >
+                      {node.type === 'passive' ? '◈ PASSIVA' : '⚡ ATTIVA'}
+                    </Text>
+                    {node.unlocked ? (
+                      <Text style={[styles.unlockCheck, { color: rankColor }]}>✓ SBLOCCATA</Text>
                     ) : (
-                      <>
-                        <View style={styles.nodeTop}>
-                          <Text style={[styles.nodeType, { color: node.type === 'passive' ? Colors.accent : Colors.warning }]}>
-                            {node.type === 'passive' ? '◈ PASSIVA' : '⚡ ATTIVA'}
-                          </Text>
-                          {node.unlocked && <Text style={[styles.unlockCheck, { color: rankColor }]}>✓</Text>}
-                        </View>
-                        <Text style={[styles.nodeName, node.unlocked ? { color: rankColor } : !canUnlock ? { color: Colors.textMuted } : {}]} numberOfLines={2}>
-                          {node.name}
-                        </Text>
-                        <Text style={styles.nodeDesc} numberOfLines={2}>{node.description}</Text>
-                        {statBonusText(node.statBonus) ? (
-                          <Text style={[styles.nodeBonus, node.unlocked ? { color: rankColor } : {}]}>
-                            {statBonusText(node.statBonus)}
-                          </Text>
-                        ) : null}
-                        {!node.unlocked && (
-                          <Text style={[styles.nodeLevel, canUnlock ? { color: Colors.accent } : {}]}>
-                            Lv. {node.unlockLevel}
-                          </Text>
-                        )}
-                      </>
+                      <Text style={[styles.nodeLevel, canUnlock ? { color: Colors.accent } : {}]}>
+                        Lv. {node.unlockLevel}
+                      </Text>
                     )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          );
-        })}
-      </View>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.nodeName,
+                      node.unlocked ? { color: rankColor } : !canUnlock ? { color: Colors.textMuted } : {},
+                    ]}
+                  >
+                    {node.name}
+                  </Text>
+                  <Text style={styles.nodeDesc}>{node.description}</Text>
+                  {statBonusText(node.statBonus) ? (
+                    <Text style={[styles.nodeBonus, node.unlocked ? { color: rankColor } : {}]}>
+                      {statBonusText(node.statBonus)}
+                    </Text>
+                  ) : null}
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        );
+      })}
+
+      {nodes.length === 0 && !loading && (
+        <Text style={styles.loadingText}>Nessuna skill disponibile</Text>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 60 },
-  center: { flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
+  content: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 60 },
+  center: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 32,
+  },
   loadingText: { color: Colors.textMuted, fontSize: 12, letterSpacing: 1, textAlign: 'center' },
 
   systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginBottom: 4 },
-  subtitle: { color: Colors.textSecondary, fontSize: 12, marginBottom: 28 },
+  subtitle: { color: Colors.textSecondary, fontSize: 12, marginBottom: 24 },
 
-  row: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', gap: COL_GAP, paddingHorizontal: 0 },
+  nodeRow: { position: 'relative', marginBottom: 12 },
+  guide: {
+    position: 'absolute',
+    top: -12,
+    bottom: 0,
+    width: 1,
+    backgroundColor: Colors.border,
+  },
+  elbow: {
+    position: 'absolute',
+    top: '50%',
+    width: 12,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
 
   node: {
-    width: NODE_W, height: NODE_H,
-    borderWidth: 1, borderColor: Colors.border,
-    borderRadius: 8, backgroundColor: Colors.surface,
-    padding: 10, justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+    padding: 14,
+    gap: 4,
   },
   nodeCanUnlock: { borderColor: Colors.accent, borderStyle: 'dashed' },
   nodeLocked: { opacity: 0.5 },
 
-  nodeTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  nodeType: { fontSize: 8, letterSpacing: 1, fontWeight: '700' },
-  unlockCheck: { fontSize: 12, fontWeight: '800' },
+  nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  nodeType: { fontSize: 9, letterSpacing: 1, fontWeight: '700' },
+  unlockCheck: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  nodeLevel: { color: Colors.textMuted, fontSize: 11, fontWeight: '700' },
 
-  nodeName: { color: Colors.text, fontSize: 12, fontWeight: '700', lineHeight: 16 },
-  nodeDesc: { color: Colors.textMuted, fontSize: 9, lineHeight: 13, flex: 1 },
-  nodeBonus: { color: Colors.accent, fontSize: 9, fontWeight: '700' },
-  nodeLevel: { color: Colors.textMuted, fontSize: 10, fontWeight: '700', textAlign: 'right' },
+  nodeName: { color: Colors.text, fontSize: 15, fontWeight: '700', lineHeight: 19 },
+  nodeDesc: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16 },
+  nodeBonus: { color: Colors.accent, fontSize: 11, fontWeight: '700', marginTop: 2 },
 });
