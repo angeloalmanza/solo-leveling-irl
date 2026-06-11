@@ -16,7 +16,11 @@ export default function NutritionScreen() {
   async function handlePhoto(mealType: MealLog['mealType']) {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) { Alert.alert('Permesso negato', 'Consenti l\'accesso alla fotocamera nelle impostazioni'); return; }
-    const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6 });
+    const result = await ImagePicker.launchCameraAsync({
+      base64: true,
+      quality: 0.3,
+      exif: false,
+    });
     if (result.canceled || !result.assets[0].base64) return;
     setPhotoLoading(mealType);
     try {
