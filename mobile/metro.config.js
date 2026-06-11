@@ -15,4 +15,8 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+config.resolver.extraNodeModules = {
+  assert: require.resolve('assert'),
+};
+
 module.exports = config;
