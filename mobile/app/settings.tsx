@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import {
   requestPermissions, scheduleDailyReminder, cancelAllReminders,
-  getSavedSettings, saveSettings,
+  getSavedSettings, saveSettings, notificationsAvailable,
 } from '../lib/notifications';
 import { Colors } from '../constants/theme';
 
@@ -60,6 +60,14 @@ export default function SettingsScreen() {
       </TouchableOpacity>
 
       <Text style={s.pageLabel}>[ IMPOSTAZIONI ]</Text>
+
+      {!notificationsAvailable && (
+        <View style={s.banner}>
+          <Text style={s.bannerText}>
+            Le notifiche non sono disponibili in Expo Go su Android dall'SDK 53. Usa un development build per abilitarle.
+          </Text>
+        </View>
+      )}
 
       <View style={s.section}>
         <Text style={s.sectionLabel}>NOTIFICHE PUSH</Text>
@@ -148,4 +156,7 @@ const s = StyleSheet.create({
 
   saveBtn: { backgroundColor: Colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
   saveBtnText: { color: Colors.background, fontSize: 13, fontWeight: '800', letterSpacing: 3 },
+
+  banner: { backgroundColor: '#1a1000', borderWidth: 1, borderColor: Colors.warning, borderRadius: 8, padding: 12, marginBottom: 20 },
+  bannerText: { color: Colors.warning, fontSize: 12, lineHeight: 18 },
 });
