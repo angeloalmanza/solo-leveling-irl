@@ -34,6 +34,7 @@ export interface MacroTotals {
 
 export interface NutritionGoal extends MacroTotals {
   id: string;
+  isCustom: boolean;
 }
 
 interface TodayData {
@@ -67,6 +68,8 @@ interface NutritionState {
   saveMeal: (mealLogId: string, name: string) => Promise<void>;
   useSavedMeal: (savedMealId: string, mealType: MealLog['mealType']) => Promise<void>;
   deleteSavedMeal: (id: string) => Promise<void>;
+  updateGoals: (goals: { calories: number; protein: number; carbs: number; fat: number }) => Promise<void>;
+  resetGoals: () => Promise<void>;
 }
 
 export const MEAL_LABELS: Record<MealLog['mealType'], string> = {
@@ -147,5 +150,15 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   deleteSavedMeal: async (id: string) => {
     await api.delete(`/nutrition/saved-meals/${id}`);
     set((s) => ({ savedMeals: s.savedMeals.filter((m) => m.id !== id) }));
+  },
+
+  updateGoals: async (goals) => {
+    await api.patch('/nutrition/goals', goals);
+    await get().fetchToday();
+  },
+
+  resetGoals: async () => {
+    await api.post('/nutrition/goals/reset');
+    await get().fetchToday();
   },
 }));

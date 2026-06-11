@@ -233,6 +233,37 @@ async function checkAndGrantVitReward(characterId: string, userId: string) {
   }
 }
 
+// ── Obiettivi personalizzabili ─────────────────────────────────────────────
+
+router.patch('/goals', requireAuth, async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const schema = z.object({
+    calories: z.number().positive(),
+    protein: z.number().positive(),
+    carbs: z.number().positive(),
+    fat: z.number().positive(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+
+  const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const goal = await prisma.nutritionGoal.update({
+    where: { characterId: char.id },
+    data: { ...parsed.data, isCustom: true },
+  });
+  res.json(goal);
+});
+
+router.post('/goals/reset', requireAuth, async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const goal = await prisma.nutritionGoal.update({
+    where: { characterId: char.id },
+    data: { isCustom: false },
+  });
+  res.json(goal);
+});
+
 // ── Pasti Salvati ──────────────────────────────────────────────────────────
 
 router.get('/saved-meals', requireAuth, async (req, res: Response) => {

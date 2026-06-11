@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
   TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,8 +11,48 @@ import { MacroBar } from '../../components/MacroBar';
 import { Colors } from '../../constants/theme';
 
 export default function NutritionScreen() {
-  const { today, loading, fetchToday, removeMealItem, photoParseFood, addMealItem } = useNutritionStore();
+  const { today, loading, fetchToday, removeMealItem, photoParseFood, addMealItem, updateGoals, resetGoals } = useNutritionStore();
   const [photoLoading, setPhotoLoading] = useState<MealLog['mealType'] | null>(null);
+  const [showGoalsModal, setShowGoalsModal] = useState(false);
+  const [goalCalories, setGoalCalories] = useState('');
+  const [goalProtein, setGoalProtein] = useState('');
+  const [goalCarbs, setGoalCarbs] = useState('');
+  const [goalFat, setGoalFat] = useState('');
+  const [savingGoals, setSavingGoals] = useState(false);
+
+  function openGoalsModal() {
+    const g = today?.goals;
+    setGoalCalories(String(Math.round(g?.calories ?? 0)));
+    setGoalProtein(String(Math.round(g?.protein ?? 0)));
+    setGoalCarbs(String(Math.round(g?.carbs ?? 0)));
+    setGoalFat(String(Math.round(g?.fat ?? 0)));
+    setShowGoalsModal(true);
+  }
+
+  async function handleSaveGoals() {
+    const c = parseFloat(goalCalories), p = parseFloat(goalProtein), ca = parseFloat(goalCarbs), f = parseFloat(goalFat);
+    if ([c, p, ca, f].some((v) => isNaN(v) || v <= 0)) {
+      Alert.alert('Errore', 'Tutti i valori devono essere positivi');
+      return;
+    }
+    setSavingGoals(true);
+    try {
+      await updateGoals({ calories: c, protein: p, carbs: ca, fat: f });
+      setShowGoalsModal(false);
+    } finally {
+      setSavingGoals(false);
+    }
+  }
+
+  async function handleResetGoals() {
+    setSavingGoals(true);
+    try {
+      await resetGoals();
+      setShowGoalsModal(false);
+    } finally {
+      setSavingGoals(false);
+    }
+  }
 
   async function handlePhoto(mealType: MealLog['mealType']) {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -61,6 +102,9 @@ export default function NutritionScreen() {
       <View style={styles.macrosCard}>
         <View style={styles.macrosHeader}>
           <Text style={styles.macrosTitle}>OBIETTIVI GIORNALIERI</Text>
+          <TouchableOpacity onPress={openGoalsModal} style={styles.editGoalsBtn}>
+            <Text style={styles.editGoalsText}>✏</Text>
+          </TouchableOpacity>
           {today?.rewardGiven && (
             <View style={styles.rewardBadge}>
               <Text style={styles.rewardText}>+1 VIT ✓</Text>
@@ -131,6 +175,48 @@ export default function NutritionScreen() {
         );
       })}
     </ScrollView>
+
+    {/* Modal obiettivi */}
+    <Modal visible={showGoalsModal} animationType="slide" transparent onRequestClose={() => setShowGoalsModal(false)}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>[ OBIETTIVI PERSONALIZZATI ]</Text>
+            <TouchableOpacity onPress={() => setShowGoalsModal(false)}>
+              <Text style={styles.modalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {[
+            { label: 'Calorie (kcal)', value: goalCalories, set: setGoalCalories },
+            { label: 'Proteine (g)', value: goalProtein, set: setGoalProtein },
+            { label: 'Carboidrati (g)', value: goalCarbs, set: setGoalCarbs },
+            { label: 'Grassi (g)', value: goalFat, set: setGoalFat },
+          ].map(({ label, value, set }) => (
+            <View key={label} style={styles.goalRow}>
+              <Text style={styles.goalLabel}>{label}</Text>
+              <TextInput
+                style={styles.goalInput}
+                value={value}
+                onChangeText={set}
+                keyboardType="decimal-pad"
+                selectTextOnFocus
+              />
+            </View>
+          ))}
+
+          <TouchableOpacity style={styles.saveGoalsBtn} onPress={handleSaveGoals} disabled={savingGoals}>
+            {savingGoals ? <ActivityIndicator color={Colors.background} /> : <Text style={styles.saveGoalsBtnText}>SALVA OBIETTIVI</Text>}
+          </TouchableOpacity>
+
+          {today?.goals?.isCustom && (
+            <TouchableOpacity style={styles.resetGoalsBtn} onPress={handleResetGoals} disabled={savingGoals}>
+              <Text style={styles.resetGoalsBtnText}>Reimposta automatico (BMR/TDEE)</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -181,4 +267,20 @@ const styles = StyleSheet.create({
   removeBtnText: { color: Colors.textMuted, fontSize: 20, lineHeight: 20 },
 
   emptyMeal: { color: Colors.textMuted, fontSize: 12, paddingLeft: 4 },
+
+  editGoalsBtn: { padding: 6 },
+  editGoalsText: { color: Colors.textSecondary, fontSize: 14 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: Colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { color: Colors.accent, fontSize: 10, letterSpacing: 3 },
+  modalClose: { color: Colors.textMuted, fontSize: 18 },
+  goalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  goalLabel: { color: Colors.textSecondary, fontSize: 13 },
+  goalInput: { backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, color: Colors.text, fontSize: 16, fontWeight: '700', width: 100, textAlign: 'right' },
+  saveGoalsBtn: { backgroundColor: Colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
+  saveGoalsBtnText: { color: Colors.background, fontSize: 12, fontWeight: '800', letterSpacing: 3 },
+  resetGoalsBtn: { alignItems: 'center', paddingVertical: 12 },
+  resetGoalsBtnText: { color: Colors.textMuted, fontSize: 12, textDecorationLine: 'underline' },
 });

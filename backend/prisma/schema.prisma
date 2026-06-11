@@ -122,6 +122,7 @@ model NutritionGoal {
   protein     Float
   carbs       Float
   fat         Float
+  isCustom    Boolean   @default(false)
   updatedAt   DateTime  @updatedAt
 }
 
