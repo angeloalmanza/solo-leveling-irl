@@ -67,6 +67,59 @@ IMPORTANTE: scrivi solo testo, niente simboli speciali, niente parentesi, niente
   return content;
 }
 
+export async function analyzeMealPhoto(base64Image: string): Promise<ParsedFood[]> {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error('GROQ_API_KEY not set');
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      messages: [
+        {
+          role: 'system',
+          content: 'Sei un nutrizionista esperto. Analizza le immagini di pasti e restituisci SOLO un array JSON valido, senza testo aggiuntivo.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
+            {
+              type: 'text',
+              text: `Analizza il pasto nell'immagine. Per ogni alimento riconoscibile stima i valori nutrizionali PER 100g e i grammi presenti nel piatto.
+
+Rispondi SOLO con questo array JSON (nessun testo prima o dopo):
+[{"name":"nome in italiano","grams":100,"caloriesPer100g":0,"proteinPer100g":0,"carbsPer100g":0,"fatPer100g":0,"fiberPer100g":0}]`,
+            },
+          ],
+        },
+      ],
+      max_tokens: 1024,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!res.ok) throw new Error(`Groq vision ${res.status}: ${await res.text()}`);
+
+  const json = await res.json() as { choices: { message: { content: string } }[] };
+  const content = json.choices[0].message.content ?? '[]';
+
+  // estrai il JSON anche se il modello aggiunge testo intorno
+  const match = content.match(/\[[\s\S]*\]/);
+  const raw = JSON.parse(match ? match[0] : content) as Partial<ParsedFood>[];
+
+  return raw.map((item) => ({
+    name: String(item.name ?? 'Alimento').slice(0, 100),
+    grams: Math.max(1, Math.round(Number(item.grams) || 100)),
+    caloriesPer100g: Math.max(0, Number(item.caloriesPer100g) || 0),
+    proteinPer100g: Math.max(0, Number(item.proteinPer100g) || 0),
+    carbsPer100g: Math.max(0, Number(item.carbsPer100g) || 0),
+    fatPer100g: Math.max(0, Number(item.fatPer100g) || 0),
+    fiberPer100g: Math.max(0, Number(item.fiberPer100g) || 0),
+  }));
+}
+
 export async function parseFoodWithAI(description: string): Promise<ParsedFood> {
   const content = await groqChat([
     {

@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator, KeyboardAvoidingView,
-  Platform, ScrollView,
+  Platform, ScrollView, Alert, Modal,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useNutritionStore, Food, MealLog } from '../../stores/nutritionStore';
+import { useNutritionStore, Food, MealLog, SavedMeal } from '../../stores/nutritionStore';
 import { Colors } from '../../constants/theme';
 
 const EXAMPLES = [
@@ -26,14 +26,18 @@ interface ParsedResult {
 
 export default function FoodSearchScreen() {
   const { mealType } = useLocalSearchParams<{ mealType: MealLog['mealType'] }>();
-  const { aiParseFood, addMealItem } = useNutritionStore();
+  const { aiParseFood, addMealItem, savedMeals, fetchSavedMeals, saveMeal, useSavedMeal, deleteSavedMeal } = useNutritionStore();
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ParsedResult | null>(null);
+  const [addedMealLogId, setAddedMealLogId] = useState<string | null>(null);
   const [grams, setGrams] = useState('');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
+  const [showSaved, setShowSaved] = useState(false);
+
+  useEffect(() => { fetchSavedMeals(); }, []);
 
   async function handleAnalyze() {
     const desc = input.trim();
@@ -64,6 +68,30 @@ export default function FoodSearchScreen() {
     }
   }
 
+  async function handleUseSaved(meal: SavedMeal) {
+    if (!mealType) return;
+    try {
+      await useSavedMeal(meal.id, mealType);
+      setShowSaved(false);
+      router.back();
+    } catch {
+      Alert.alert('Errore', 'Impossibile caricare il pasto salvato');
+    }
+  }
+
+  async function handleSaveMeal() {
+    if (!addedMealLogId) return;
+    Alert.prompt('SALVA PASTO', 'Dai un nome a questo pasto', async (name) => {
+      if (!name?.trim()) return;
+      try {
+        await saveMeal(addedMealLogId, name.trim());
+        Alert.alert('SALVATO', 'Pasto aggiunto ai preferiti');
+      } catch {
+        Alert.alert('Errore', 'Impossibile salvare il pasto');
+      }
+    });
+  }
+
   const totalKcal = result
     ? Math.round(result.food.calories * (parseFloat(grams) || result.grams) / 100)
     : 0;
@@ -84,7 +112,44 @@ export default function FoodSearchScreen() {
           <Text style={s.backText}>← Indietro</Text>
         </TouchableOpacity>
         <Text style={s.headerTitle}>[ AI FOOD SCANNER ]</Text>
+        <TouchableOpacity style={s.savedBtn} onPress={() => setShowSaved(true)}>
+          <Text style={s.savedBtnText}>★ SALVATI</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Modal pasti salvati */}
+      <Modal visible={showSaved} animationType="slide" transparent onRequestClose={() => setShowSaved(false)}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>[ PASTI SALVATI ]</Text>
+              <TouchableOpacity onPress={() => setShowSaved(false)}>
+                <Text style={s.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {savedMeals.length === 0 ? (
+              <Text style={s.modalEmpty}>Nessun pasto salvato</Text>
+            ) : (
+              <ScrollView>
+                {savedMeals.map((meal) => (
+                  <View key={meal.id} style={s.savedRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.savedName}>{meal.name}</Text>
+                      <Text style={s.savedItems}>{meal.items.length} aliment{meal.items.length === 1 ? 'o' : 'i'}</Text>
+                    </View>
+                    <TouchableOpacity style={s.useBtn} onPress={() => handleUseSaved(meal)}>
+                      <Text style={s.useBtnText}>USA</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.delBtn} onPress={() => deleteSavedMeal(meal.id)}>
+                      <Text style={s.delBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
         <Text style={s.label}>DESCRIVI CIÒ CHE HAI MANGIATO</Text>
@@ -296,4 +361,22 @@ const s = StyleSheet.create({
     paddingVertical: 16, alignItems: 'center',
   },
   addBtnText: { color: Colors.background, fontSize: 12, fontWeight: '800', letterSpacing: 3, fontFamily: 'Orbitron_700Bold' },
+
+  savedBtn: { marginLeft: 'auto', borderWidth: 1, borderColor: Colors.warning, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
+  savedBtnText: { color: Colors.warning, fontSize: 9, letterSpacing: 1 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: Colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: '70%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { color: Colors.accent, fontSize: 11, letterSpacing: 3 },
+  modalClose: { color: Colors.textMuted, fontSize: 18 },
+  modalEmpty: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 20 },
+
+  savedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  savedName: { color: Colors.text, fontSize: 14, fontWeight: '700' },
+  savedItems: { color: Colors.textMuted, fontSize: 11, marginTop: 2 },
+  useBtn: { backgroundColor: Colors.accent, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 },
+  useBtnText: { color: Colors.background, fontSize: 11, fontWeight: '800' },
+  delBtn: { paddingHorizontal: 8 },
+  delBtnText: { color: Colors.error, fontSize: 16 },
 });

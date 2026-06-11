@@ -43,17 +43,30 @@ interface TodayData {
   rewardGiven: boolean;
 }
 
+export interface SavedMeal {
+  id: string;
+  name: string;
+  mealType: MealLog['mealType'];
+  items: { foodId: string; foodName: string; quantity: number }[];
+}
+
 interface NutritionState {
   today: TodayData | null;
   searchResults: Food[];
   searching: boolean;
   loading: boolean;
+  savedMeals: SavedMeal[];
   fetchToday: () => Promise<void>;
   searchFoods: (q: string) => Promise<void>;
   aiParseFood: (description: string) => Promise<{ food: Food; grams: number }>;
+  photoParseFood: (base64: string) => Promise<{ food: Food; grams: number }[]>;
   addMealItem: (mealType: MealLog['mealType'], foodId: string, quantity: number) => Promise<void>;
   removeMealItem: (mealId: string, itemId: string) => Promise<void>;
   clearSearch: () => void;
+  fetchSavedMeals: () => Promise<void>;
+  saveMeal: (mealLogId: string, name: string) => Promise<void>;
+  useSavedMeal: (savedMealId: string, mealType: MealLog['mealType']) => Promise<void>;
+  deleteSavedMeal: (id: string) => Promise<void>;
 }
 
 export const MEAL_LABELS: Record<MealLog['mealType'], string> = {
@@ -70,6 +83,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   searchResults: [],
   searching: false,
   loading: false,
+  savedMeals: [],
 
   fetchToday: async () => {
     set({ loading: true });
@@ -109,4 +123,29 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
   },
 
   clearSearch: () => set({ searchResults: [] }),
+
+  photoParseFood: async (base64: string) => {
+    const { data } = await api.post<{ food: Food; grams: number }[]>('/nutrition/photo-parse', { image: base64 });
+    return data;
+  },
+
+  fetchSavedMeals: async () => {
+    const { data } = await api.get<SavedMeal[]>('/nutrition/saved-meals');
+    set({ savedMeals: data });
+  },
+
+  saveMeal: async (mealLogId: string, name: string) => {
+    await api.post('/nutrition/saved-meals', { mealLogId, name });
+    await get().fetchSavedMeals();
+  },
+
+  useSavedMeal: async (savedMealId: string, mealType: MealLog['mealType']) => {
+    await api.post(`/nutrition/saved-meals/${savedMealId}/use`, { mealType });
+    await get().fetchToday();
+  },
+
+  deleteSavedMeal: async (id: string) => {
+    await api.delete(`/nutrition/saved-meals/${id}`);
+    set((s) => ({ savedMeals: s.savedMeals.filter((m) => m.id !== id) }));
+  },
 }));

@@ -1,15 +1,36 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, ActivityIndicator, RefreshControl,
+  TouchableOpacity, ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useNutritionStore, MealLog, MEAL_LABELS, MEAL_ORDER } from '../../stores/nutritionStore';
 import { MacroBar } from '../../components/MacroBar';
 import { Colors } from '../../constants/theme';
 
 export default function NutritionScreen() {
-  const { today, loading, fetchToday, removeMealItem } = useNutritionStore();
+  const { today, loading, fetchToday, removeMealItem, photoParseFood, addMealItem } = useNutritionStore();
+  const [photoLoading, setPhotoLoading] = useState<MealLog['mealType'] | null>(null);
+
+  async function handlePhoto(mealType: MealLog['mealType']) {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permesso negato', 'Consenti l\'accesso alla fotocamera nelle impostazioni'); return; }
+    const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6 });
+    if (result.canceled || !result.assets[0].base64) return;
+    setPhotoLoading(mealType);
+    try {
+      const items = await photoParseFood(result.assets[0].base64);
+      for (const { food, grams } of items) {
+        await addMealItem(mealType, food.id, grams);
+      }
+      Alert.alert('ANALISI COMPLETATA', `${items.length} alimento${items.length > 1 ? 'i' : ''} aggiunto${items.length > 1 ? 'i' : ''}`);
+    } catch {
+      Alert.alert('Errore', 'Impossibile analizzare la foto');
+    } finally {
+      setPhotoLoading(null);
+    }
+  }
 
   useEffect(() => { fetchToday(); }, []);
 
@@ -65,6 +86,15 @@ export default function NutritionScreen() {
               {meal && (
                 <Text style={styles.mealCalories}>{Math.round(meal.totals.calories)} kcal</Text>
               )}
+              <TouchableOpacity
+                style={styles.photoBtn}
+                onPress={() => handlePhoto(mealType)}
+                disabled={photoLoading === mealType}
+              >
+                {photoLoading === mealType
+                  ? <ActivityIndicator color={Colors.accent} size="small" />
+                  : <Text style={styles.photoBtnText}>📷</Text>}
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.addBtn}
                 onPress={() => router.push({ pathname: '/nutrition/search', params: { mealType } })}
@@ -131,6 +161,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   addBtnText: { color: Colors.accent, fontSize: 18, lineHeight: 22, fontWeight: '700' },
+  photoBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  photoBtnText: { fontSize: 16 },
 
   foodItem: {
     flexDirection: 'row', alignItems: 'center',

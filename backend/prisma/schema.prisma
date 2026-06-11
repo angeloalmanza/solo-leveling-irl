@@ -55,6 +55,7 @@ model Character {
   weeklyBosses        WeeklyBoss[]
   statSnapshots       StatSnapshot[]
   bodyLogs            BodyLog[]
+  savedMeals          SavedMeal[]
 }
 
 model QuestTemplate {
@@ -197,6 +198,16 @@ enum MealType {
   lunch
   dinner
   snack
+}
+
+model SavedMeal {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  name        String
+  mealType    MealType
+  items       Json
+  createdAt   DateTime  @default(now())
 }
 
 model BodyLog {

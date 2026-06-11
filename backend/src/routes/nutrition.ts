@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { searchFoods } from '../services/foodService';
-import { parseFoodWithAI } from '../services/aiService';
+import { parseFoodWithAI, analyzeMealPhoto } from '../services/aiService';
 import { applyXP, applyStats } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 
@@ -232,5 +232,127 @@ async function checkAndGrantVitReward(characterId: string, userId: string) {
     await runUnlockCheck(characterId);
   }
 }
+
+// ── Pasti Salvati ──────────────────────────────────────────────────────────
+
+router.get('/saved-meals', requireAuth, async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const meals = await prisma.savedMeal.findMany({
+    where: { characterId: char.id },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json(meals);
+});
+
+router.post('/saved-meals', requireAuth, async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const schema = z.object({
+    name: z.string().min(1).max(60),
+    mealLogId: z.string(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+
+  const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const mealLog = await prisma.mealLog.findFirst({
+    where: { id: parsed.data.mealLogId, characterId: char.id },
+    include: { items: { include: { food: true } } },
+  });
+  if (!mealLog) { res.status(404).json({ error: 'Pasto non trovato' }); return; }
+
+  const items = mealLog.items.map((i) => ({
+    foodId: i.foodId,
+    foodName: i.food.name,
+    quantity: i.quantity,
+  }));
+
+  const saved = await prisma.savedMeal.create({
+    data: {
+      characterId: char.id,
+      name: parsed.data.name,
+      mealType: mealLog.mealType,
+      items,
+    },
+  });
+  res.status(201).json(saved);
+});
+
+router.delete('/saved-meals/:id', requireAuth, async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  await prisma.savedMeal.deleteMany({ where: { id: req.params.id, characterId: char.id } });
+  res.status(204).send();
+});
+
+router.post('/saved-meals/:id/use', requireAuth, async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const schema = z.object({ mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+
+  const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const saved = await prisma.savedMeal.findFirst({ where: { id: req.params.id, characterId: char.id } });
+  if (!saved) { res.status(404).json({ error: 'Pasto salvato non trovato' }); return; }
+
+  const todayDate = today();
+  let mealLog = await prisma.mealLog.findFirst({
+    where: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType },
+  });
+  if (!mealLog) {
+    mealLog = await prisma.mealLog.create({
+      data: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType },
+    });
+  }
+
+  const items = saved.items as { foodId: string; quantity: number }[];
+  for (const item of items) {
+    const foodExists = await prisma.food.findUnique({ where: { id: item.foodId } });
+    if (foodExists) {
+      await prisma.mealItem.create({
+        data: { mealLogId: mealLog.id, foodId: item.foodId, quantity: item.quantity },
+      });
+    }
+  }
+
+  await checkAndGrantVitReward(char.id, userId);
+  res.json({ success: true });
+});
+
+// ── Foto AI ────────────────────────────────────────────────────────────────
+
+router.post('/photo-parse', requireAuth, async (req, res: Response) => {
+  const image = String(req.body?.image ?? '').trim();
+  if (!image) { res.status(400).json({ error: 'image (base64) required' }); return; }
+
+  try {
+    const parsed = await analyzeMealPhoto(image);
+    const results = [];
+
+    for (const item of parsed) {
+      const existing = await prisma.food.findFirst({
+        where: { name: { equals: item.name, mode: 'insensitive' }, source: 'ai' },
+      });
+      const foodData = {
+        name: item.name,
+        calories: Math.round(item.caloriesPer100g),
+        protein: Math.round(item.proteinPer100g * 10) / 10,
+        carbs: Math.round(item.carbsPer100g * 10) / 10,
+        fat: Math.round(item.fatPer100g * 10) / 10,
+        fiber: Math.round(item.fiberPer100g * 10) / 10,
+        source: 'ai',
+      };
+      const food = existing
+        ? await prisma.food.update({ where: { id: existing.id }, data: foodData })
+        : await prisma.food.create({ data: foodData });
+      results.push({ food, grams: item.grams });
+    }
+
+    res.json(results);
+  } catch (err) {
+    console.error('Photo parse error:', err);
+    res.status(503).json({ error: 'Impossibile analizzare la foto.' });
+  }
+});
 
 export default router;
