@@ -105,10 +105,10 @@ export async function applyInactivityPenalty(characterId: string): Promise<Penal
   if (!char.lastQuestDate) return null;
 
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
 
   const lastDate = new Date(char.lastQuestDate);
-  lastDate.setHours(0, 0, 0, 0);
+  lastDate.setUTCHours(0, 0, 0, 0);
 
   const msPerDay = 24 * 60 * 60 * 1000;
   const daysDiff = Math.floor((today.getTime() - lastDate.getTime()) / msPerDay);
@@ -155,13 +155,13 @@ export async function updateStreak(characterId: string): Promise<{ streak: numbe
   const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
 
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
 
   const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
   const lastDate = char.lastQuestDate ? new Date(char.lastQuestDate) : null;
-  if (lastDate) lastDate.setHours(0, 0, 0, 0);
+  if (lastDate) lastDate.setUTCHours(0, 0, 0, 0);
 
   let newStreak = char.streak;
 

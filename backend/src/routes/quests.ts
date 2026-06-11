@@ -13,7 +13,7 @@ router.get('/daily', requireAuth, async (req, res: Response) => {
     const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     const existing = await prisma.dailyQuest.findMany({
       where: { characterId: character.id, date: today },
@@ -98,7 +98,7 @@ router.post('/daily/refresh', requireAuth, async (req, res: Response) => {
     const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     const todayQuests = await prisma.dailyQuest.findMany({
       where: { characterId: character.id, date: today },
@@ -199,7 +199,7 @@ router.post('/daily/:id/reroll', requireAuth, async (req, res: Response) => {
     }
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     let template;
     if (newQuest) {

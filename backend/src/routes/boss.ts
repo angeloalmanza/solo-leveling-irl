@@ -13,7 +13,7 @@ function getWeekStart(): Date {
   const diff = day === 0 ? -6 : 1 - day; // porta a lunedì
   const monday = new Date(now);
   monday.setDate(now.getDate() + diff);
-  monday.setHours(0, 0, 0, 0);
+  monday.setUTCHours(0, 0, 0, 0);
   return monday;
 }
 
