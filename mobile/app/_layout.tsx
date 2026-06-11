@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts, Orbitron_400Regular, Orbitron_700Bold, Orbitron_800ExtraBold } from '@expo-google-fonts/orbitron';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../stores/authStore';
-// import { setupDailyNotification } from '../lib/notifications';
+import { requestPermissions, scheduleDailyReminder, getSavedSettings } from '../lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,9 +20,14 @@ export default function RootLayout() {
   useEffect(() => {
     if (!fontsLoaded && !fontError) return;
     SplashScreen.hideAsync();
-    // setupDailyNotification();
-    hydrate().then(() => {
+
+    hydrate().then(async () => {
       if (isAuthenticated) router.replace('/(tabs)/status');
+      const granted = await requestPermissions();
+      if (granted) {
+        const { hour, minute, enabled } = await getSavedSettings();
+        if (enabled) await scheduleDailyReminder(hour, minute);
+      }
     });
   }, [fontsLoaded, fontError]);
 
@@ -38,6 +43,7 @@ export default function RootLayout() {
         <Stack.Screen name="progress" options={{ presentation: 'modal' }} />
         <Stack.Screen name="body" options={{ presentation: 'modal' }} />
         <Stack.Screen name="weekly-summary" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
       </Stack>
     </>
   );

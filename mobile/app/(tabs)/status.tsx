@@ -55,7 +55,12 @@ export default function StatusScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <LinearGradient colors={['#0d1a2e', Colors.background]} style={styles.header}>
-        <Text style={styles.systemLabel}>[ STATUS WINDOW ]</Text>
+        <View style={styles.topBar}>
+          <Text style={styles.systemLabel}>[ STATUS WINDOW ]</Text>
+          <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsBtn}>
+            <Text style={styles.settingsBtnText}>⚙</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.nameRow}>
           <RankBadge rank={character.rank} size="lg" />
@@ -133,7 +138,10 @@ const styles = StyleSheet.create({
   retry: { color: Colors.accent, fontWeight: '700' },
 
   header: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 24 },
-  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginBottom: 20, fontFamily: 'Orbitron_400Regular' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, fontFamily: 'Orbitron_400Regular' },
+  settingsBtn: { padding: 4 },
+  settingsBtnText: { color: Colors.textMuted, fontSize: 20 },
 
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
   nameBlock: { flex: 1 },
