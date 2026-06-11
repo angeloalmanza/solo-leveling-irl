@@ -54,6 +54,7 @@ model Character {
   unlockedAchievements UnlockedAchievement[]
   weeklyBosses        WeeklyBoss[]
   statSnapshots       StatSnapshot[]
+  bodyLogs            BodyLog[]
 }
 
 model QuestTemplate {
@@ -196,6 +197,19 @@ enum MealType {
   lunch
   dinner
   snack
+}
+
+model BodyLog {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  weight      Float?
+  waist       Float?
+  chest       Float?
+  createdAt   DateTime  @default(now())
+
+  @@unique([characterId, date])
 }
 
 model StatSnapshot {

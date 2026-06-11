@@ -36,6 +36,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="nutrition/search" options={{ presentation: 'modal' }} />
         <Stack.Screen name="progress" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="body" options={{ presentation: 'modal' }} />
       </Stack>
     </>
   );

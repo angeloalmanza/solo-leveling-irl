@@ -96,9 +96,14 @@ export default function StatusScreen() {
       <View style={styles.divider} />
       <Text style={styles.sectionLabel}>[ STATISTICS ]</Text>
 
-      <TouchableOpacity style={styles.progressBtn} onPress={() => router.push('/progress')}>
-        <Text style={styles.progressBtnText}>[ PROGRESSI ]</Text>
-      </TouchableOpacity>
+      <View style={styles.btnRow}>
+        <TouchableOpacity style={styles.halfBtn} onPress={() => router.push('/progress')}>
+          <Text style={styles.halfBtnText}>[ PROGRESSI ]</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.halfBtn} onPress={() => router.push('/body')}>
+          <Text style={styles.halfBtnText}>[ MISURE ]</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.statsGrid}>
         <View style={styles.statsRow}>
@@ -150,8 +155,9 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 24, marginVertical: 8 },
   sectionLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginHorizontal: 24, marginTop: 16, marginBottom: 12 },
 
-  progressBtn: { marginHorizontal: 24, marginBottom: 16, borderWidth: 1, borderColor: Colors.accent, borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
-  progressBtnText: { color: Colors.accent, fontSize: 11, letterSpacing: 3 },
+  btnRow: { flexDirection: 'row', marginHorizontal: 24, marginBottom: 16, gap: 10 },
+  halfBtn: { flex: 1, borderWidth: 1, borderColor: Colors.accent, borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
+  halfBtnText: { color: Colors.accent, fontSize: 10, letterSpacing: 2 },
 
   statsGrid: { paddingHorizontal: 24, gap: 10 },
   statsRow: { flexDirection: 'row', gap: 10 },
