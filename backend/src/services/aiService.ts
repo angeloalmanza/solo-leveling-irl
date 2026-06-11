@@ -63,6 +63,89 @@ Rispondi con questo JSON esatto (solo JSON, nessun testo fuori):
   };
 }
 
+export interface AIBossTask {
+  title: string;
+  description: string;
+}
+
+export interface AIWeeklyBoss {
+  name: string;
+  description: string;
+  lore: string;
+  xpReward: number;
+  statRewards: Record<string, number>;
+  difficulty: number;
+  tasks: AIBossTask[];
+}
+
+export async function generateWeeklyBoss(character: {
+  level: number;
+  rank: string;
+  str: number;
+  agi: number;
+  int: number;
+  end: number;
+  vit: number;
+}): Promise<AIWeeklyBoss> {
+  const baseQuestXp = Math.floor(25 + character.level * 1.5);
+  const xpReward = Math.round(baseQuestXp * 3);
+
+  const content = await groqChat([
+    {
+      role: 'system',
+      content:
+        'Sei il Sistema di Solo Leveling. Generi boss settimanali epici per un Hunter nel mondo reale. Rispondi SOLO con JSON valido.',
+    },
+    {
+      role: 'user',
+      content: `Genera un Boss Settimanale per questo Hunter.
+
+Statistiche:
+- Livello ${character.level} | Rank ${character.rank}
+- STR ${character.str} | AGI ${character.agi} | INT ${character.int} | END ${character.end} | VIT ${character.vit}
+
+REGOLE:
+- name: nome del boss in italiano/inglese stile Solo Leveling (es. "Monarch of Shadows", "Tyrant Beast")
+- description: descrizione breve del boss (max 120 caratteri), in italiano
+- lore: backstory in italiano, 2-3 frasi epiche, stile Solo Leveling
+- difficulty: da 1 a 5, proporzionale al livello ${character.level}
+- xpReward: esattamente ${xpReward}
+- statRewards: JSON con almeno 3 stat tra str/agi/int/end/vit, valori 2-5
+- tasks: array di esattamente 3 sfide settimanali nel mondo reale, proporzionate al livello, mix fitness e mente
+
+Rispondi con JSON:
+{
+  "name": "string",
+  "description": "string",
+  "lore": "string",
+  "xpReward": ${xpReward},
+  "statRewards": {"str": 3, "agi": 2, "end": 2},
+  "difficulty": number,
+  "tasks": [
+    {"title": "string", "description": "string"},
+    {"title": "string", "description": "string"},
+    {"title": "string", "description": "string"}
+  ]
+}`,
+    },
+  ]);
+
+  const raw = JSON.parse(content) as AIWeeklyBoss;
+
+  return {
+    name: String(raw.name ?? 'Shadow Monarch').slice(0, 100),
+    description: String(raw.description ?? '').slice(0, 255),
+    lore: String(raw.lore ?? '').slice(0, 500),
+    xpReward,
+    statRewards: typeof raw.statRewards === 'object' && raw.statRewards !== null ? raw.statRewards : { str: 2, agi: 2, int: 2 },
+    difficulty: Math.min(Math.max(Math.round(Number(raw.difficulty) || 3), 1), 5),
+    tasks: (Array.isArray(raw.tasks) ? raw.tasks.slice(0, 3) : []).map((t) => ({
+      title: String(t.title ?? '').slice(0, 100),
+      description: String(t.description ?? '').slice(0, 255),
+    })),
+  };
+}
+
 export async function generateDailyQuests(character: {
   level: number;
   rank: string;

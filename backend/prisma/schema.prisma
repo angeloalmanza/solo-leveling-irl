@@ -52,6 +52,7 @@ model Character {
   nutritionGoal       NutritionGoal?
   unlockedShadows     UnlockedShadow[]
   unlockedAchievements UnlockedAchievement[]
+  weeklyBosses        WeeklyBoss[]
 }
 
 model QuestTemplate {
@@ -194,4 +195,32 @@ enum MealType {
   lunch
   dinner
   snack
+}
+
+model WeeklyBoss {
+  id          String           @id @default(cuid())
+  characterId String
+  character   Character        @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  weekStart   DateTime         @db.Date
+  name        String
+  description String
+  lore        String
+  xpReward    Int
+  statRewards Json
+  difficulty  Int
+  tasks       WeeklyBossTask[]
+  defeatedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@unique([characterId, weekStart])
+}
+
+model WeeklyBossTask {
+  id          String     @id @default(cuid())
+  bossId      String
+  boss        WeeklyBoss @relation(fields: [bossId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  completed   Boolean    @default(false)
+  completedAt DateTime?
 }
