@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
-import { applyInactivityPenalty, getDynamicTitle } from '../services/levelService';
+import { applyInactivityPenalty, getDynamicTitle, saveSnapshotIfNeeded } from '../services/levelService';
 
 const router = Router();
 
@@ -26,6 +26,7 @@ router.get('/me', requireAuth, async (req, res: Response) => {
     });
   }
 
+  await saveSnapshotIfNeeded(character.id);
   const activeTitle = getDynamicTitle(character);
   res.json({ ...character, activeTitle, penalty: penalty ?? null });
 });

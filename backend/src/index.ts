@@ -8,6 +8,7 @@ import questRoutes from './routes/quests';
 import nutritionRoutes from './routes/nutrition';
 import unlockRoutes from './routes/unlocks';
 import bossRoutes from './routes/boss';
+import progressRoutes from './routes/progress';
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -25,6 +26,7 @@ app.use('/quests', questRoutes);
 app.use('/nutrition', nutritionRoutes);
 app.use('/unlocks', unlockRoutes);
 app.use('/boss', bossRoutes);
+app.use('/progress', progressRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

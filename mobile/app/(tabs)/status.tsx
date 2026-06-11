@@ -8,6 +8,7 @@ import { useCharacterStore, streakMultiplier } from '../../stores/characterStore
 import { RankBadge } from '../../components/RankBadge';
 import { XPBar } from '../../components/XPBar';
 import { StatCard } from '../../components/StatCard';
+import { router } from 'expo-router';
 import { Colors, RankColors } from '../../constants/theme';
 
 export default function StatusScreen() {
@@ -95,6 +96,10 @@ export default function StatusScreen() {
       <View style={styles.divider} />
       <Text style={styles.sectionLabel}>[ STATISTICS ]</Text>
 
+      <TouchableOpacity style={styles.progressBtn} onPress={() => router.push('/progress')}>
+        <Text style={styles.progressBtnText}>[ PROGRESSI ]</Text>
+      </TouchableOpacity>
+
       <View style={styles.statsGrid}>
         <View style={styles.statsRow}>
           <StatCard stat="STR" value={character.str} />
@@ -144,6 +149,9 @@ const styles = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 24, marginVertical: 8 },
   sectionLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginHorizontal: 24, marginTop: 16, marginBottom: 12 },
+
+  progressBtn: { marginHorizontal: 24, marginBottom: 16, borderWidth: 1, borderColor: Colors.accent, borderRadius: 6, paddingVertical: 10, alignItems: 'center' },
+  progressBtnText: { color: Colors.accent, fontSize: 11, letterSpacing: 3 },
 
   statsGrid: { paddingHorizontal: 24, gap: 10 },
   statsRow: { flexDirection: 'row', gap: 10 },

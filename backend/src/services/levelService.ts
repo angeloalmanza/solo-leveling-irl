@@ -41,6 +41,19 @@ export interface LevelUpResult {
   newRank: Rank;
 }
 
+export async function saveSnapshotIfNeeded(characterId: string): Promise<void> {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const existing = await prisma.statSnapshot.findUnique({
+    where: { characterId_date: { characterId, date: today } },
+  });
+  if (existing) return;
+  const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
+  await prisma.statSnapshot.create({
+    data: { characterId, date: today, str: char.str, agi: char.agi, int: char.int, end: char.end, vit: char.vit, level: char.level },
+  });
+}
+
 export async function applyXP(characterId: string, baseXp: number): Promise<LevelUpResult> {
   const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
 
@@ -64,6 +77,10 @@ export async function applyXP(characterId: string, baseXp: number): Promise<Leve
     where: { id: characterId },
     data: { level, xp, rank: newRank },
   });
+
+  if (level > oldLevel) {
+    await saveSnapshotIfNeeded(characterId);
+  }
 
   return {
     leveledUp: level > oldLevel,

@@ -53,6 +53,7 @@ model Character {
   unlockedShadows     UnlockedShadow[]
   unlockedAchievements UnlockedAchievement[]
   weeklyBosses        WeeklyBoss[]
+  statSnapshots       StatSnapshot[]
 }
 
 model QuestTemplate {
@@ -195,6 +196,21 @@ enum MealType {
   lunch
   dinner
   snack
+}
+
+model StatSnapshot {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  str         Int
+  agi         Int
+  int         Int
+  end         Int
+  vit         Int
+  level       Int
+
+  @@unique([characterId, date])
 }
 
 model WeeklyBoss {
