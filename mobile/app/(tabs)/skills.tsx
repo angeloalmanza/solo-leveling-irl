@@ -7,24 +7,6 @@ import { useSkillStore, Skill } from '../../stores/skillStore';
 import { useCharacterStore } from '../../stores/characterStore';
 import { Colors, RankColors } from '../../constants/theme';
 
-const INDENT = 22;
-
-type SkillNode = Skill & { depth: number };
-
-/** Appiattisce l'albero in ordine DFS (genitore poi figli), con la profondità. */
-function flattenTree(skills: Skill[]): SkillNode[] {
-  const roots = skills.filter((s) => !s.parentSkillId);
-  const result: SkillNode[] = [];
-  function visit(skill: Skill, depth: number) {
-    result.push({ ...skill, depth });
-    skills
-      .filter((s) => s.parentSkillId === skill.id)
-      .forEach((child) => visit(child, depth + 1));
-  }
-  roots.forEach((root) => visit(root, 0));
-  return result;
-}
-
 function statBonusText(bonus: Record<string, number>) {
   return (
     Object.entries(bonus)
@@ -43,7 +25,10 @@ export default function SkillsScreen() {
     fetch();
   }, []);
 
-  const nodes = flattenTree(skills);
+  // Ordinate per livello di sblocco crescente (a parità, per nome)
+  const ordered = [...skills].sort(
+    (a, b) => a.unlockLevel - b.unlockLevel || a.name.localeCompare(b.name)
+  );
 
   function handleUnlock(skill: Skill) {
     if (skill.unlocked) return;
@@ -81,6 +66,8 @@ export default function SkillsScreen() {
     );
   }
 
+  let lastLevel: number | null = null;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.systemLabel}>[ SKILL TREE ]</Text>
@@ -90,23 +77,25 @@ export default function SkillsScreen() {
         </Text>
       )}
 
-      {nodes.map((node) => {
+      {ordered.map((node) => {
+        const parent = node.parentSkillId ? skills.find((s) => s.id === node.parentSkillId) : null;
+        const parentLocked = !!parent && !parent.unlocked;
         const canUnlock =
-          !node.unlocked &&
-          !!character &&
-          character.level >= node.unlockLevel &&
-          (!node.parentSkillId || skills.find((s) => s.id === node.parentSkillId)?.unlocked);
+          !node.unlocked && !!character && character.level >= node.unlockLevel && !parentLocked;
         const isUnlocking = unlocking === node.id;
 
+        // Intestazione di livello quando cambia
+        const showHeader = node.unlockLevel !== lastLevel;
+        lastLevel = node.unlockLevel;
+
         return (
-          <View key={node.id} style={[styles.nodeRow, { paddingLeft: node.depth * INDENT }]}>
-            {/* Guide verticali per i livelli di annidamento */}
-            {Array.from({ length: node.depth }).map((_, i) => (
-              <View key={i} style={[styles.guide, { left: i * INDENT + 10 }]} />
-            ))}
-            {/* Connettore orizzontale verso la card (per i figli) */}
-            {node.depth > 0 && (
-              <View style={[styles.elbow, { left: (node.depth - 1) * INDENT + 10 }]} />
+          <View key={node.id}>
+            {showHeader && (
+              <View style={styles.levelHeader}>
+                <View style={styles.levelLine} />
+                <Text style={styles.levelLabel}>LIVELLO {node.unlockLevel}</Text>
+                <View style={styles.levelLine} />
+              </View>
             )}
 
             <TouchableOpacity
@@ -155,6 +144,9 @@ export default function SkillsScreen() {
                       {statBonusText(node.statBonus)}
                     </Text>
                   ) : null}
+                  {parentLocked && (
+                    <Text style={styles.prereq}>🔒 Richiede: {parent!.name}</Text>
+                  )}
                 </>
               )}
             </TouchableOpacity>
@@ -162,7 +154,7 @@ export default function SkillsScreen() {
         );
       })}
 
-      {nodes.length === 0 && !loading && (
+      {ordered.length === 0 && !loading && (
         <Text style={styles.loadingText}>Nessuna skill disponibile</Text>
       )}
     </ScrollView>
@@ -183,23 +175,11 @@ const styles = StyleSheet.create({
   loadingText: { color: Colors.textMuted, fontSize: 12, letterSpacing: 1, textAlign: 'center' },
 
   systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginBottom: 4 },
-  subtitle: { color: Colors.textSecondary, fontSize: 12, marginBottom: 24 },
+  subtitle: { color: Colors.textSecondary, fontSize: 12, marginBottom: 16 },
 
-  nodeRow: { position: 'relative', marginBottom: 12 },
-  guide: {
-    position: 'absolute',
-    top: -12,
-    bottom: 0,
-    width: 1,
-    backgroundColor: Colors.border,
-  },
-  elbow: {
-    position: 'absolute',
-    top: '50%',
-    width: 12,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
+  levelHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18, marginBottom: 10 },
+  levelLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  levelLabel: { color: Colors.textSecondary, fontSize: 10, letterSpacing: 3, fontWeight: '700' },
 
   node: {
     borderWidth: 1,
@@ -208,6 +188,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     padding: 14,
     gap: 4,
+    marginBottom: 10,
   },
   nodeCanUnlock: { borderColor: Colors.accent, borderStyle: 'dashed' },
   nodeLocked: { opacity: 0.5 },
@@ -220,4 +201,5 @@ const styles = StyleSheet.create({
   nodeName: { color: Colors.text, fontSize: 15, fontWeight: '700', lineHeight: 19 },
   nodeDesc: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16 },
   nodeBonus: { color: Colors.accent, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  prereq: { color: Colors.warning, fontSize: 11, marginTop: 4 },
 });
