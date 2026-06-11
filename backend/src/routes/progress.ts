@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateWeeklySummary } from '../services/aiService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { aiLimiter } from '../middleware/rateLimit';
 
 const summaryCache = new Map<string, { summary: string; generatedAt: Date; date: string }>();
 
@@ -66,7 +67,7 @@ router.get('/stats', requireAuth, asyncHandler(async (req, res: Response) => {
   });
 }));
 
-router.get('/weekly-summary', requireAuth, asyncHandler(async (req, res: Response) => {
+router.get('/weekly-summary', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 

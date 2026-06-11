@@ -6,6 +6,7 @@ import { runUnlockCheck } from '../services/unlockService';
 import { generateDailyQuests } from '../services/aiService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { logger } from '../lib/logger';
+import { aiLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -172,7 +173,7 @@ router.post('/daily/refresh', requireAuth, asyncHandler(async (req, res: Respons
   }
 }));
 
-router.post('/daily/:id/reroll', requireAuth, asyncHandler(async (req, res: Response) => {
+router.post('/daily/:id/reroll', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
   try {
     const userId = (req as AuthRequest).userId;
     const character = await prisma.character.findUniqueOrThrow({ where: { userId } });

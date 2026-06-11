@@ -33,6 +33,10 @@ export default function RegisterScreen() {
       setError('Compila tutti i campi');
       return;
     }
+    if (password.length < 8) {
+      setError('La password deve avere almeno 8 caratteri');
+      return;
+    }
     setError('');
     setLoading(true);
     try {

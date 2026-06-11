@@ -8,8 +8,12 @@ import { applyXP, applyStats } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { logger } from '../lib/logger';
+import { aiLimiter } from '../middleware/rateLimit';
 
 const router = Router();
+
+// Limite massimo per l'immagine base64 (~7.5MB binari ≈ 10MB base64)
+const MAX_IMAGE_BASE64_LEN = 10 * 1024 * 1024;
 
 function today() {
   const d = new Date();
@@ -107,7 +111,7 @@ router.get('/foods/search', requireAuth, asyncHandler(async (req, res: Response)
   res.json(foods);
 }));
 
-router.post('/ai-parse', requireAuth, asyncHandler(async (req, res: Response) => {
+router.post('/ai-parse', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
   const description = String(req.body?.description ?? '').trim();
   if (!description) {
     res.status(400).json({ error: 'description required' });
@@ -354,9 +358,22 @@ router.post('/saved-meals/:id/use', requireAuth, asyncHandler(async (req, res: R
 
 // ── Foto AI ────────────────────────────────────────────────────────────────
 
-router.post('/photo-parse', requireAuth, asyncHandler(async (req, res: Response) => {
-  const image = String(req.body?.image ?? '').trim();
+router.post('/photo-parse', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
+  let image = String(req.body?.image ?? '').trim();
   if (!image) { res.status(400).json({ error: 'image (base64) required' }); return; }
+
+  // Rimuove un eventuale data URI prefix e valida formato/dimensione
+  const dataUriMatch = image.match(/^data:image\/(jpe?g|png|webp);base64,(.+)$/i);
+  if (dataUriMatch) image = dataUriMatch[2];
+
+  if (image.length > MAX_IMAGE_BASE64_LEN) {
+    res.status(413).json({ error: 'Immagine troppo grande' });
+    return;
+  }
+  if (!/^[A-Za-z0-9+/=]+$/.test(image)) {
+    res.status(400).json({ error: 'Immagine non in formato base64 valido' });
+    return;
+  }
 
   try {
     const parsed = await analyzeMealPhoto(image);

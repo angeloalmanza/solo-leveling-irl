@@ -8,12 +8,25 @@ datasource db {
 }
 
 model User {
-  id           String      @id @default(cuid())
-  email        String      @unique
-  passwordHash String
-  createdAt    DateTime    @default(now())
-  profile      UserProfile?
-  character    Character?
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  profile       UserProfile?
+  character     Character?
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model UserProfile {
@@ -57,6 +70,7 @@ model Character {
   bodyLogs            BodyLog[]
   savedMeals          SavedMeal[]
   unlockedSkills      UnlockedSkill[]
+  skills              Skill[]
 }
 
 model QuestTemplate {
@@ -197,6 +211,8 @@ enum QuestCategory {
 
 model Skill {
   id            String          @id @default(cuid())
+  characterId   String
+  character     Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
   name          String
   description   String
   type          SkillType
@@ -206,6 +222,8 @@ model Skill {
   parentSkill   Skill?          @relation("SkillTree", fields: [parentSkillId], references: [id])
   children      Skill[]         @relation("SkillTree")
   unlockedBy    UnlockedSkill[]
+
+  @@index([characterId])
 }
 
 model UnlockedSkill {
