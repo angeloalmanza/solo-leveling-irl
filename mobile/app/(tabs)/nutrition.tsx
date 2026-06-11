@@ -92,6 +92,7 @@ export default function NutritionScreen() {
   }, {});
 
   return (
+    <View style={styles.root}>
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -177,6 +178,7 @@ export default function NutritionScreen() {
     </ScrollView>
 
     {/* Modal obiettivi */}
+
     <Modal visible={showGoalsModal} animationType="slide" transparent onRequestClose={() => setShowGoalsModal(false)}>
       <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.modalCard}>
@@ -217,10 +219,12 @@ export default function NutritionScreen() {
         </View>
       </KeyboardAvoidingView>
     </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.background },
   container: { flex: 1, backgroundColor: Colors.background },
   content: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 40 },
   center: { flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
