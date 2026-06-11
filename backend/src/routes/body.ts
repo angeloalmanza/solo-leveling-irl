@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const BodyLogSchema = z.object({
   chest: z.number().positive().optional(),
 });
 
-router.get('/logs', requireAuth, async (req, res: Response) => {
+router.get('/logs', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -25,9 +26,9 @@ router.get('/logs', requireAuth, async (req, res: Response) => {
     ...l,
     date: new Date(l.date).toISOString().split('T')[0],
   })));
-});
+}));
 
-router.post('/logs', requireAuth, async (req, res: Response) => {
+router.post('/logs', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const parsed = BodyLogSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -54,6 +55,6 @@ router.post('/logs', requireAuth, async (req, res: Response) => {
   }
 
   res.json({ ...log, date: new Date(log.date).toISOString().split('T')[0] });
-});
+}));
 
 export default router;

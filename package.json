@@ -7,7 +7,14 @@
   ],
   "scripts": {
     "mobile": "npm run start --workspace=mobile",
-    "backend": "npm run dev --workspace=backend"
+    "backend": "npm run dev --workspace=backend",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p backend/tsconfig.json --noEmit && tsc -p mobile/tsconfig.json --noEmit",
+    "typecheck:backend": "tsc -p backend/tsconfig.json --noEmit",
+    "test": "npm run test --workspace=backend"
   },
   "dependencies": {
     "@egjs/hammerjs": "^2.0.17",
@@ -17,5 +24,13 @@
     "react-native-is-edge-to-edge": "^1.3.1",
     "semver": "^7.8.1",
     "warn-once": "^0.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "globals": "^15.15.0",
+    "prettier": "^3.8.4",
+    "typescript-eslint": "^8.61.0"
   }
 }

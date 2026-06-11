@@ -10,6 +10,31 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soloirl -d solo_leveling_irl"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend opzionale containerizzato. Avvia con: docker compose --profile full up
+  backend:
+    profiles: ["full"]
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://soloirl:soloirl_dev@db:5432/solo_leveling_irl
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      PORT: 3000
+      NODE_ENV: production
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    ports:
+      - "3000:3000"
 
 volumes:
   pgdata:

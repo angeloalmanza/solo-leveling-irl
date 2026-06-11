@@ -4,6 +4,7 @@ import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateSkillTree } from '../services/aiService';
 import { applyStats, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -52,15 +53,15 @@ async function ensureSkillTree(character: { id: string; level: number; rank: str
   }
 }
 
-router.get('/', requireAuth, async (req, res: Response) => {
+router.get('/', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
   await ensureSkillTree(char);
   const skills = await buildSkillTree(char.id);
   res.json(skills);
-});
+}));
 
-router.post('/:id/unlock', requireAuth, async (req, res: Response) => {
+router.post('/:id/unlock', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -102,15 +103,15 @@ router.post('/:id/unlock', requireAuth, async (req, res: Response) => {
     character: { ...updatedChar, activeTitle: getDynamicTitle(updatedChar) },
     newlyUnlocked,
   });
-});
+}));
 
-router.get('/generate', requireAuth, async (req, res: Response) => {
+router.get('/generate', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
   await prisma.skill.deleteMany();
   await ensureSkillTree(char);
   const skills = await buildSkillTree(char.id);
   res.json(skills);
-});
+}));
 
 export default router;

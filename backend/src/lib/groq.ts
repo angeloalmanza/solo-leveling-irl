@@ -1,11 +1,12 @@
+import { env } from './env';
+
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const MODEL = 'llama-3.3-70b-versatile';
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string };
 
 export async function groqChat(messages: Message[]): Promise<string> {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) throw new Error('GROQ_API_KEY not set');
+  const key = env.GROQ_API_KEY;
 
   const res = await fetch(`${GROQ_BASE}/chat/completions`, {
     method: 'POST',

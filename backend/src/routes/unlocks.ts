@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
-router.get('/shadows', requireAuth, async (req, res: Response) => {
+router.get('/shadows', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -25,9 +26,9 @@ router.get('/shadows', requireAuth, async (req, res: Response) => {
       unlockedAt: unlockedMap.get(s.id) ?? null,
     }))
   );
-});
+}));
 
-router.get('/achievements', requireAuth, async (req, res: Response) => {
+router.get('/achievements', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -48,6 +49,6 @@ router.get('/achievements', requireAuth, async (req, res: Response) => {
       unlockedAt: unlockedMap.get(a.id) ?? null,
     }))
   );
-});
+}));
 
 export default router;

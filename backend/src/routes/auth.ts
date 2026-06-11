@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import { signAccess, signRefresh, verifyRefresh } from '../lib/jwt';
 import { calcNutritionGoals } from '../utils/nutrition';
 import { ActivityLevel, Sex } from '@prisma/client';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ const LoginSchema = z.object({
   password: z.string(),
 });
 
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', asyncHandler(async (req: Request, res: Response) => {
   const parsed = RegisterSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -62,9 +63,9 @@ router.post('/register', async (req: Request, res: Response) => {
   const refreshToken = signRefresh(user.id);
 
   res.status(201).json({ accessToken, refreshToken, characterName: user.character!.name });
-});
+}));
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', asyncHandler(async (req: Request, res: Response) => {
   const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -82,9 +83,9 @@ router.post('/login', async (req: Request, res: Response) => {
   const refreshToken = signRefresh(user.id);
 
   res.json({ accessToken, refreshToken });
-});
+}));
 
-router.post('/refresh', async (req: Request, res: Response) => {
+router.post('/refresh', asyncHandler(async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
     res.status(400).json({ error: 'Missing refresh token' });
@@ -97,6 +98,6 @@ router.post('/refresh', async (req: Request, res: Response) => {
   } catch {
     res.status(401).json({ error: 'Invalid refresh token' });
   }
-});
+}));
 
 export default router;

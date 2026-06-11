@@ -6,6 +6,8 @@ import { searchFoods } from '../services/foodService';
 import { parseFoodWithAI, analyzeMealPhoto } from '../services/aiService';
 import { applyXP, applyStats } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
+import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -31,7 +33,7 @@ function calcMealTotals(items: { quantity: number; food: { calories: number; pro
 
 function round2(n: number) { return Math.round(n * 10) / 10; }
 
-router.get('/goals', requireAuth, async (req, res: Response) => {
+router.get('/goals', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({
     where: { userId },
@@ -42,9 +44,9 @@ router.get('/goals', requireAuth, async (req, res: Response) => {
     return;
   }
   res.json(character.nutritionGoal);
-});
+}));
 
-router.get('/today', requireAuth, async (req, res: Response) => {
+router.get('/today', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({
     where: { userId },
@@ -93,9 +95,9 @@ router.get('/today', requireAuth, async (req, res: Response) => {
     goals: character.nutritionGoal,
     rewardGiven,
   });
-});
+}));
 
-router.get('/foods/search', requireAuth, async (req, res: Response) => {
+router.get('/foods/search', requireAuth, asyncHandler(async (req, res: Response) => {
   const q = String(req.query.q ?? '').trim();
   if (q.length < 2) {
     res.status(400).json({ error: 'Query too short' });
@@ -103,9 +105,9 @@ router.get('/foods/search', requireAuth, async (req, res: Response) => {
   }
   const foods = await searchFoods(q);
   res.json(foods);
-});
+}));
 
-router.post('/ai-parse', requireAuth, async (req, res: Response) => {
+router.post('/ai-parse', requireAuth, asyncHandler(async (req, res: Response) => {
   const description = String(req.body?.description ?? '').trim();
   if (!description) {
     res.status(400).json({ error: 'description required' });
@@ -135,12 +137,12 @@ router.post('/ai-parse', requireAuth, async (req, res: Response) => {
 
     res.json({ food, grams: parsed.grams });
   } catch (err) {
-    console.error('AI parse error:', err);
+    logger.error({ err }, 'AI parse error');
     res.status(503).json({ error: 'AI non disponibile, riprova tra poco.' });
   }
-});
+}));
 
-router.post('/meals', requireAuth, async (req, res: Response) => {
+router.post('/meals', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const schema = z.object({ mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']) });
   const parsed = schema.safeParse(req.body);
@@ -156,9 +158,9 @@ router.post('/meals', requireAuth, async (req, res: Response) => {
     data: { characterId: character.id, date: today(), mealType: parsed.data.mealType },
   });
   res.status(201).json(meal);
-});
+}));
 
-router.post('/meals/:id/items', requireAuth, async (req, res: Response) => {
+router.post('/meals/:id/items', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const schema = z.object({ foodId: z.string(), quantity: z.number().positive() });
   const parsed = schema.safeParse(req.body);
@@ -178,9 +180,9 @@ router.post('/meals/:id/items', requireAuth, async (req, res: Response) => {
   await checkAndGrantVitReward(character.id, userId);
 
   res.status(201).json(item);
-});
+}));
 
-router.delete('/meals/:mealId/items/:itemId', requireAuth, async (req, res: Response) => {
+router.delete('/meals/:mealId/items/:itemId', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
   const meal = await prisma.mealLog.findFirst({ where: { id: req.params.mealId, characterId: character.id } });
@@ -188,9 +190,9 @@ router.delete('/meals/:mealId/items/:itemId', requireAuth, async (req, res: Resp
 
   await prisma.mealItem.deleteMany({ where: { id: req.params.itemId, mealLogId: meal.id } });
   res.status(204).send();
-});
+}));
 
-async function checkAndGrantVitReward(characterId: string, userId: string) {
+async function checkAndGrantVitReward(characterId: string, _userId: string) {
   const character = await prisma.character.findUniqueOrThrow({
     where: { id: characterId },
     include: { nutritionGoal: true },
@@ -235,7 +237,7 @@ async function checkAndGrantVitReward(characterId: string, userId: string) {
 
 // ── Obiettivi personalizzabili ─────────────────────────────────────────────
 
-router.patch('/goals', requireAuth, async (req, res: Response) => {
+router.patch('/goals', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const schema = z.object({
     calories: z.number().positive(),
@@ -252,9 +254,9 @@ router.patch('/goals', requireAuth, async (req, res: Response) => {
     data: { ...parsed.data, isCustom: true },
   });
   res.json(goal);
-});
+}));
 
-router.post('/goals/reset', requireAuth, async (req, res: Response) => {
+router.post('/goals/reset', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
   const goal = await prisma.nutritionGoal.update({
@@ -262,11 +264,11 @@ router.post('/goals/reset', requireAuth, async (req, res: Response) => {
     data: { isCustom: false },
   });
   res.json(goal);
-});
+}));
 
 // ── Pasti Salvati ──────────────────────────────────────────────────────────
 
-router.get('/saved-meals', requireAuth, async (req, res: Response) => {
+router.get('/saved-meals', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
   const meals = await prisma.savedMeal.findMany({
@@ -274,9 +276,9 @@ router.get('/saved-meals', requireAuth, async (req, res: Response) => {
     orderBy: { createdAt: 'desc' },
   });
   res.json(meals);
-});
+}));
 
-router.post('/saved-meals', requireAuth, async (req, res: Response) => {
+router.post('/saved-meals', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const schema = z.object({
     name: z.string().min(1).max(60),
@@ -307,16 +309,16 @@ router.post('/saved-meals', requireAuth, async (req, res: Response) => {
     },
   });
   res.status(201).json(saved);
-});
+}));
 
-router.delete('/saved-meals/:id', requireAuth, async (req, res: Response) => {
+router.delete('/saved-meals/:id', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
   await prisma.savedMeal.deleteMany({ where: { id: req.params.id, characterId: char.id } });
   res.status(204).send();
-});
+}));
 
-router.post('/saved-meals/:id/use', requireAuth, async (req, res: Response) => {
+router.post('/saved-meals/:id/use', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const schema = z.object({ mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']) });
   const parsed = schema.safeParse(req.body);
@@ -348,11 +350,11 @@ router.post('/saved-meals/:id/use', requireAuth, async (req, res: Response) => {
 
   await checkAndGrantVitReward(char.id, userId);
   res.json({ success: true });
-});
+}));
 
 // ── Foto AI ────────────────────────────────────────────────────────────────
 
-router.post('/photo-parse', requireAuth, async (req, res: Response) => {
+router.post('/photo-parse', requireAuth, asyncHandler(async (req, res: Response) => {
   const image = String(req.body?.image ?? '').trim();
   if (!image) { res.status(400).json({ error: 'image (base64) required' }); return; }
 
@@ -381,9 +383,9 @@ router.post('/photo-parse', requireAuth, async (req, res: Response) => {
 
     res.json(results);
   } catch (err) {
-    console.error('Photo parse error:', err);
+    logger.error({ err }, 'Photo parse error');
     res.status(503).json({ error: 'Impossibile analizzare la foto.' });
   }
-});
+}));
 
 export default router;

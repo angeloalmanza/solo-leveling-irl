@@ -4,6 +4,7 @@ import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateWeeklyBoss } from '../services/aiService';
 import { applyXP, applyStats, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ function getWeekStart(): Date {
   return monday;
 }
 
-router.get('/weekly', requireAuth, async (req, res: Response) => {
+router.get('/weekly', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({
     where: { userId },
@@ -60,9 +61,9 @@ router.get('/weekly', requireAuth, async (req, res: Response) => {
   }
 
   res.json(boss);
-});
+}));
 
-router.post('/weekly/tasks/:taskId/complete', requireAuth, async (req, res: Response) => {
+router.post('/weekly/tasks/:taskId/complete', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({
     where: { userId },
@@ -95,9 +96,9 @@ router.post('/weekly/tasks/:taskId/complete', requireAuth, async (req, res: Resp
   });
 
   res.json({ task: updated, boss });
-});
+}));
 
-router.post('/weekly/defeat', requireAuth, async (req, res: Response) => {
+router.post('/weekly/defeat', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({
     where: { userId },
@@ -132,6 +133,6 @@ router.post('/weekly/defeat', requireAuth, async (req, res: Response) => {
     newlyUnlocked,
     character: { ...updatedChar, activeTitle: getDynamicTitle(updatedChar) },
   });
-});
+}));
 
 export default router;

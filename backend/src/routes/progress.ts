@@ -2,12 +2,13 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateWeeklySummary } from '../services/aiService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const summaryCache = new Map<string, { summary: string; generatedAt: Date; date: string }>();
 
 const router = Router();
 
-router.get('/calendar', requireAuth, async (req, res: Response) => {
+router.get('/calendar', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -36,9 +37,9 @@ router.get('/calendar', requireAuth, async (req, res: Response) => {
   }));
 
   res.json(result);
-});
+}));
 
-router.get('/stats', requireAuth, async (req, res: Response) => {
+router.get('/stats', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -63,9 +64,9 @@ router.get('/stats', requireAuth, async (req, res: Response) => {
       level: s.level,
     })),
   });
-});
+}));
 
-router.get('/weekly-summary', requireAuth, async (req, res: Response) => {
+router.get('/weekly-summary', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -153,6 +154,6 @@ router.get('/weekly-summary', requireAuth, async (req, res: Response) => {
   const result = { summary, generatedAt: new Date(), date: todayKey };
   summaryCache.set(cacheKey, result);
   res.json(result);
-});
+}));
 
 export default router;

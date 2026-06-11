@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { applyInactivityPenalty, getDynamicTitle, saveSnapshotIfNeeded } from '../services/levelService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
-router.get('/me', requireAuth, async (req, res: Response) => {
+router.get('/me', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   let character = await prisma.character.findUnique({
     where: { userId },
@@ -29,14 +30,14 @@ router.get('/me', requireAuth, async (req, res: Response) => {
   await saveSnapshotIfNeeded(character.id);
   const activeTitle = getDynamicTitle(character);
   res.json({ ...character, activeTitle, penalty: penalty ?? null });
-});
+}));
 
 const PatchSchema = z.object({
   name: z.string().min(1).max(30).optional(),
   activeTitle: z.string().nullable().optional(),
 });
 
-router.patch('/me', requireAuth, async (req, res: Response) => {
+router.patch('/me', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const parsed = PatchSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -48,6 +49,6 @@ router.patch('/me', requireAuth, async (req, res: Response) => {
     data: parsed.data,
   });
   res.json(character);
-});
+}));
 
 export default router;

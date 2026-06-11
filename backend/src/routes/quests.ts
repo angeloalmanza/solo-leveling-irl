@@ -1,13 +1,15 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
-import { applyXP, applyStats, updateStreak, calcStreakMultiplier, getDynamicTitle } from '../services/levelService';
+import { applyXP, applyStats, updateStreak, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { generateDailyQuests } from '../services/aiService';
+import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
-router.get('/daily', requireAuth, async (req, res: Response) => {
+router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
   try {
     const userId = (req as AuthRequest).userId;
     const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
@@ -38,7 +40,7 @@ router.get('/daily', requireAuth, async (req, res: Response) => {
         vit: character.vit,
       });
     } catch (err) {
-      console.error('AI quest generation failed, falling back to DB templates:', err);
+      logger.warn({ err }, 'AI quest generation failed, falling back to DB templates');
     }
 
     if (aiQuests && aiQuests.length >= 2) {
@@ -87,12 +89,12 @@ router.get('/daily', requireAuth, async (req, res: Response) => {
 
     res.json(created);
   } catch (err) {
-    console.error('GET /daily error:', err);
+    logger.error({ err }, 'GET /daily error');
     res.status(500).json({ error: 'Errore nel caricamento delle quest' });
   }
-});
+}));
 
-router.post('/daily/refresh', requireAuth, async (req, res: Response) => {
+router.post('/daily/refresh', requireAuth, asyncHandler(async (req, res: Response) => {
   try {
     const userId = (req as AuthRequest).userId;
     const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
@@ -128,7 +130,7 @@ router.post('/daily/refresh', requireAuth, async (req, res: Response) => {
         end: character.end, vit: character.vit,
       });
     } catch (err) {
-      console.error('AI quest generation failed on refresh:', err);
+      logger.warn({ err }, 'AI quest generation failed on refresh');
     }
 
     const newDailyQuests: typeof todayQuests = [];
@@ -165,12 +167,12 @@ router.post('/daily/refresh', requireAuth, async (req, res: Response) => {
 
     res.json([...completed, ...newDailyQuests]);
   } catch (err) {
-    console.error('Refresh quests error:', err);
+    logger.error({ err }, 'Refresh quests error');
     res.status(500).json({ error: 'Errore nel refresh delle quest' });
   }
-});
+}));
 
-router.post('/daily/:id/reroll', requireAuth, async (req, res: Response) => {
+router.post('/daily/:id/reroll', requireAuth, asyncHandler(async (req, res: Response) => {
   try {
     const userId = (req as AuthRequest).userId;
     const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
@@ -195,7 +197,7 @@ router.post('/daily/:id/reroll', requireAuth, async (req, res: Response) => {
       });
       newQuest = aiQuests.find((q) => q.category === category) ?? aiQuests[0];
     } catch (err) {
-      console.error('AI reroll failed:', err);
+      logger.warn({ err }, 'AI reroll failed');
     }
 
     const today = new Date();
@@ -222,12 +224,12 @@ router.post('/daily/:id/reroll', requireAuth, async (req, res: Response) => {
 
     res.json(created);
   } catch (err) {
-    console.error('Reroll quest error:', err);
+    logger.error({ err }, 'Reroll quest error');
     res.status(500).json({ error: 'Errore nel reroll' });
   }
-});
+}));
 
-router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
+router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
@@ -277,6 +279,6 @@ router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
   ]);
 
   res.json({ character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) }, ...levelResult, newlyUnlocked, streak, multiplier });
-});
+}));
 
 export default router;
