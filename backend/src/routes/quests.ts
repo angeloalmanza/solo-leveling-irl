@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
-import { applyXP, applyStats, updateStreak, calcStreakMultiplier } from '../services/levelService';
+import { applyXP, applyStats, updateStreak, calcStreakMultiplier, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { generateDailyQuests } from '../services/aiService';
 
@@ -256,7 +256,7 @@ router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
       data: { completed: false, completedAt: null },
     });
     const updatedCharacter = await prisma.character.findUniqueOrThrow({ where: { id: character.id } });
-    res.json({ character: updatedCharacter, leveledUp: false, rankedUp: false, newlyUnlocked: [], undone: true });
+    res.json({ character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) }, leveledUp: false, rankedUp: false, newlyUnlocked: [], undone: true });
     return;
   }
 
@@ -276,7 +276,7 @@ router.post('/daily/:id/complete', requireAuth, async (req, res: Response) => {
     runUnlockCheck(character.id),
   ]);
 
-  res.json({ character: updatedCharacter, ...levelResult, newlyUnlocked, streak, multiplier });
+  res.json({ character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) }, ...levelResult, newlyUnlocked, streak, multiplier });
 });
 
 export default router;

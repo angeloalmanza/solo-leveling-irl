@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateWeeklyBoss } from '../services/aiService';
-import { applyXP, applyStats } from '../services/levelService';
+import { applyXP, applyStats, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 
 const router = Router();
@@ -130,7 +130,7 @@ router.post('/weekly/defeat', requireAuth, async (req, res: Response) => {
   res.json({
     ...levelResult,
     newlyUnlocked,
-    character: updatedChar,
+    character: { ...updatedChar, activeTitle: getDynamicTitle(updatedChar) },
   });
 });
 

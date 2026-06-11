@@ -2,23 +2,9 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
-import { applyInactivityPenalty } from '../services/levelService';
+import { applyInactivityPenalty, getDynamicTitle } from '../services/levelService';
 
 const router = Router();
-
-function getDynamicTitle(char: { str: number; agi: number; int: number; end: number; vit: number }): string {
-  const stats = { str: char.str, agi: char.agi, int: char.int, end: char.end, vit: char.vit };
-  const maxVal = Math.max(...Object.values(stats));
-  const dominant = Object.entries(stats).find(([, v]) => v === maxVal)?.[0];
-  const titles: Record<string, string> = {
-    str: 'Corpo d\'Acciaio',
-    agi: 'Ombra Veloce',
-    int: 'Mente Affilata',
-    end: 'Indistruttibile',
-    vit: 'Corpo Nutrito',
-  };
-  return titles[dominant ?? ''] ?? 'Cacciatore Equilibrato';
-}
 
 router.get('/me', requireAuth, async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
@@ -40,7 +26,7 @@ router.get('/me', requireAuth, async (req, res: Response) => {
     });
   }
 
-  const activeTitle = character.activeTitle ?? getDynamicTitle(character);
+  const activeTitle = getDynamicTitle(character);
   res.json({ ...character, activeTitle, penalty: penalty ?? null });
 });
 
