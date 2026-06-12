@@ -23,6 +23,23 @@ beforeEach(async () => {
   await resetUsers();
 });
 
+describe('register con obiettivi (C)', () => {
+  it('register con goals → GET /character/goals li restituisce', async () => {
+    const reg = await request(app)
+      .post('/v1/auth/register')
+      .send({ ...user, goals: ['Correre 5km', 'Meditare'] });
+    expect(reg.status).toBe(201);
+    const get = await request(app).get('/v1/character/goals').set('Authorization', `Bearer ${reg.body.accessToken}`);
+    expect(get.body.goals).toEqual(['Correre 5km', 'Meditare']);
+  });
+
+  it('register senza goals → array vuoto', async () => {
+    const reg = await request(app).post('/v1/auth/register').send(user);
+    const get = await request(app).get('/v1/character/goals').set('Authorization', `Bearer ${reg.body.accessToken}`);
+    expect(get.body.goals).toEqual([]);
+  });
+});
+
 describe('PATCH /v1/character/goals', () => {
   it('valida e persiste fino a 3 obiettivi', async () => {
     const t = await token();
