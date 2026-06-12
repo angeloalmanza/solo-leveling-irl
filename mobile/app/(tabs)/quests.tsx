@@ -97,7 +97,10 @@ export default function QuestsScreen() {
         showBanner();
         handleModalResult(result);
       }
-    } catch { /* handled in store */ }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error;
+      if (typeof msg === 'string') Alert.alert('Operazione non riuscita', msg);
+    }
   }
 
   const grouped = quests.reduce<Record<string, DailyQuest[]>>((acc, q) => {

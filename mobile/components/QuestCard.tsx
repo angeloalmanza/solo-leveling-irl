@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSequence,
-  withTiming, withSpring, Easing,
+  withTiming, withSpring,
 } from 'react-native-reanimated';
 import { Colors } from '../constants/theme';
 
@@ -40,8 +40,33 @@ export function QuestCard({
     opacity: opacity.value,
   }));
 
+  // L'opacità segue lo stato reale (aggiornato dallo store dopo la risposta)
+  useEffect(() => {
+    opacity.value = withTiming(completed ? 0.45 : 1, { duration: 300 });
+  }, [completed]);
+
   function handlePress() {
-    if (completed || completing) return;
+    if (completing) return;
+
+    if (completed) {
+      Alert.alert(
+        'ANNULLA COMPLETAMENTO',
+        'Vuoi annullare il completamento di questa quest?',
+        [
+          { text: 'No', style: 'cancel' },
+          {
+            text: 'Sì, annulla',
+            style: 'destructive',
+            onPress: () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              onComplete();
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
       'MISSIONE',
       'Hai completato questa quest?',
@@ -55,7 +80,6 @@ export function QuestCard({
               withTiming(0.97, { duration: 80 }),
               withSpring(1, { damping: 12 }),
             );
-            opacity.value = withTiming(0.45, { duration: 400, easing: Easing.out(Easing.quad) });
             onComplete();
           },
         },
@@ -100,7 +124,7 @@ export function QuestCard({
         style={[styles.card, completed && styles.cardDone]}
         onPress={handlePress}
         activeOpacity={0.85}
-        disabled={completed || completing}
+        disabled={completing}
       >
         <View style={styles.left}>
           <View style={[styles.checkbox, completed && styles.checkboxDone]}>
