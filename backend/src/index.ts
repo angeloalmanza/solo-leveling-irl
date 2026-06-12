@@ -13,6 +13,7 @@ import bossRoutes from './routes/boss';
 import progressRoutes from './routes/progress';
 import bodyRoutes from './routes/body';
 import skillsRoutes from './routes/skills';
+import accountRoutes from './routes/account';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { globalLimiter } from './middleware/rateLimit';
 import { prisma } from './lib/prisma';
@@ -60,6 +61,7 @@ v1.use('/boss', bossRoutes);
 v1.use('/progress', progressRoutes);
 v1.use('/body', bodyRoutes);
 v1.use('/skills', skillsRoutes);
+v1.use('/account', accountRoutes);
 app.use('/v1', v1);
 
 app.use(notFoundHandler);

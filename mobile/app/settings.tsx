@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Switch, ActivityIndicator, Alert, Platform, TextInput,
+  Switch, ActivityIndicator, Alert, Platform, TextInput, Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
@@ -9,7 +9,9 @@ import {
   requestPermissions, scheduleDailyReminder, cancelAllReminders,
   getSavedSettings, saveSettings, notificationsAvailable,
 } from '../lib/notifications';
-import { api } from '../lib/api';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { api, forceLogout } from '../lib/api';
 import { useUiStore } from '../stores/uiStore';
 import { Colors } from '../constants/theme';
 
@@ -24,6 +26,54 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [goals, setGoals] = useState(['', '', '']);
   const [savingGoals, setSavingGoals] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const { data } = await api.get('/account/export');
+      const path = FileSystem.documentDirectory + 'solo-leveling-irl-export.json';
+      await FileSystem.writeAsStringAsync(path, JSON.stringify(data, null, 2));
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path, { mimeType: 'application/json' });
+      } else {
+        useUiStore.getState().showToast('Condivisione non disponibile su questo dispositivo', 'error');
+      }
+    } catch {
+      useUiStore.getState().showToast('Export non riuscito', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function confirmDelete() {
+    Alert.alert(
+      '⚠ ELIMINA ACCOUNT',
+      'Azione permanente. Perderai livello, streak, e tutta la cronologia. Non si può annullare.',
+      [
+        { text: 'Annulla', style: 'cancel' },
+        { text: 'Continua', style: 'destructive', onPress: () => setShowDelete(true) },
+      ]
+    );
+  }
+
+  async function handleDeleteAccount() {
+    if (!deletePassword) { Alert.alert('Errore', 'Inserisci la password'); return; }
+    setDeleting(true);
+    try {
+      await api.delete('/account', { data: { password: deletePassword } });
+      setShowDelete(false);
+      await forceLogout();
+    } catch (e: any) {
+      const msg = e?.response?.data?.error ?? 'Eliminazione non riuscita';
+      Alert.alert('Errore', msg);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     getSavedSettings().then(({ hour: h, minute: m, enabled: e }) => {
@@ -172,6 +222,43 @@ export default function SettingsScreen() {
           {savingGoals ? <ActivityIndicator color={Colors.background} /> : <Text style={s.saveBtnText}>SALVA OBIETTIVI</Text>}
         </TouchableOpacity>
       </View>
+
+      <View style={[s.section, { marginTop: 24, borderColor: Colors.error }]}>
+        <Text style={[s.sectionLabel, { color: Colors.error }]}>[ ZONA PERICOLOSA ]</Text>
+
+        <TouchableOpacity style={s.dangerOutlineBtn} onPress={handleExport} disabled={exporting}>
+          {exporting ? <ActivityIndicator color={Colors.accent} /> : <Text style={s.dangerOutlineText}>ESPORTA I MIEI DATI</Text>}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={s.dangerBtn} onPress={confirmDelete}>
+          <Text style={s.dangerBtnText}>ELIMINA ACCOUNT</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Modal conferma eliminazione con password */}
+      <Modal visible={showDelete} animationType="slide" transparent onRequestClose={() => setShowDelete(false)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={s.modalCard}>
+            <View style={s.modalHeader}>
+              <Text style={[s.modalTitle, { color: Colors.error }]}>[ CONFERMA ELIMINAZIONE ]</Text>
+              <TouchableOpacity onPress={() => setShowDelete(false)}><Text style={s.modalClose}>✕</Text></TouchableOpacity>
+            </View>
+            <Text style={s.hint}>Inserisci la password per eliminare definitivamente l'account.</Text>
+            <TextInput
+              style={s.goalInput}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="Password"
+              placeholderTextColor={Colors.textMuted}
+              secureTextEntry
+              autoFocus
+            />
+            <TouchableOpacity style={s.dangerBtn} onPress={handleDeleteAccount} disabled={deleting}>
+              {deleting ? <ActivityIndicator color="#fff" /> : <Text style={s.dangerBtnText}>ELIMINA DEFINITIVAMENTE</Text>}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -206,4 +293,15 @@ const s = StyleSheet.create({
 
   banner: { backgroundColor: '#1a1000', borderWidth: 1, borderColor: Colors.warning, borderRadius: 8, padding: 12, marginBottom: 20 },
   bannerText: { color: Colors.warning, fontSize: 12, lineHeight: 18 },
+
+  dangerOutlineBtn: { borderWidth: 1, borderColor: Colors.accent, borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
+  dangerOutlineText: { color: Colors.accent, fontSize: 12, fontWeight: '700', letterSpacing: 2 },
+  dangerBtn: { backgroundColor: Colors.error, borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
+  dangerBtnText: { color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 2 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: Colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  modalTitle: { fontSize: 11, letterSpacing: 2, fontWeight: '700' },
+  modalClose: { color: Colors.textMuted, fontSize: 18 },
 });
