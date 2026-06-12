@@ -409,3 +409,50 @@ Rispondi con JSON:
     difficulty: Math.min(Math.max(Math.round(Number(q.difficulty) || 1), 1), 3),
   }));
 }
+
+/** Genera UNA singola quest (per il reroll), evitando i titoli già presenti. */
+export async function generateSingleQuest(
+  character: { level: number; rank: string; str: number; agi: number; int: number; end: number; vit: number },
+  category: 'fitness' | 'mente',
+  excludeTitles: string[]
+): Promise<AIQuest> {
+  const { level, rank } = character;
+  const xpMin = Math.floor(25 + level * 1.5);
+  const xpMax = Math.floor(xpMin * 2.2);
+  const exclude = excludeTitles.length > 0 ? excludeTitles.map((t) => `"${t}"`).join(', ') : 'nessuna';
+
+  const content = await groqChat([
+    {
+      role: 'system',
+      content:
+        'Sei il Sistema di Solo Leveling. Generi UNA missione giornaliera nel mondo reale per un Hunter. Rispondi SOLO con JSON valido.',
+    },
+    {
+      role: 'user',
+      content: `Genera 1 sola missione di categoria "${category}" per questo Hunter.
+
+Statistiche: Livello ${level} | Rank ${rank}
+
+REGOLE:
+- Titolo in italiano, conciso (max 50 caratteri), stile Solo Leveling epico
+- Descrizione in italiano, precisa (max 120 caratteri)
+- xpReward tra ${xpMin} e ${xpMax}
+- statRewards: chiavi "str","agi","int","end","vit" con valori 1-3
+- difficulty 1-3 in base al livello
+- DEVE essere DIVERSA da queste missioni già presenti oggi: ${exclude}
+
+Rispondi con JSON:
+{ "title": "string", "description": "string", "category": "${category}", "xpReward": number, "statRewards": {"str": 1}, "difficulty": 1 }`,
+    },
+  ]);
+
+  const q = JSON.parse(content) as AIQuest;
+  return {
+    title: String(q.title ?? '').slice(0, 100),
+    description: String(q.description ?? '').slice(0, 255),
+    category: category,
+    xpReward: Math.min(Math.max(Math.round(Number(q.xpReward) || xpMin), 10), 300),
+    statRewards: typeof q.statRewards === 'object' && q.statRewards !== null ? q.statRewards : {},
+    difficulty: Math.min(Math.max(Math.round(Number(q.difficulty) || 1), 1), 3),
+  };
+}

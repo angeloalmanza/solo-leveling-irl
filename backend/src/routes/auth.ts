@@ -20,6 +20,7 @@ const RegisterSchema = z.object({
   age: z.number().int().min(10).max(120),
   sex: z.enum(['male', 'female']),
   activityLevel: z.enum(['sedentary', 'light', 'moderate', 'active', 'very_active']),
+  timezone: z.string().min(1).max(64).optional(),
 });
 
 const LoginSchema = z.object({
@@ -52,7 +53,7 @@ router.post('/register', authLimiter, asyncHandler(async (req: Request, res: Res
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { email, password, characterName, weight, height, age, sex, activityLevel } = parsed.data;
+  const { email, password, characterName, weight, height, age, sex, activityLevel, timezone } = parsed.data;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -68,7 +69,14 @@ router.post('/register', authLimiter, asyncHandler(async (req: Request, res: Res
       email,
       passwordHash,
       profile: {
-        create: { weight, height, age, sex: sex as Sex, activityLevel: activityLevel as ActivityLevel },
+        create: {
+          weight,
+          height,
+          age,
+          sex: sex as Sex,
+          activityLevel: activityLevel as ActivityLevel,
+          ...(timezone ? { timezone } : {}),
+        },
       },
       character: {
         create: {

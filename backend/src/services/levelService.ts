@@ -1,5 +1,9 @@
-import { Rank } from '@prisma/client';
+import { Prisma, Rank } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { todayFor, DEFAULT_TZ } from '../lib/dates';
+
+/** Client Prisma o transazione interattiva. */
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export function getDynamicTitle(char: { str: number; agi: number; int: number; end: number; vit: number; activeTitle: string | null }): string {
   if (char.activeTitle) return char.activeTitle;
@@ -41,21 +45,19 @@ export interface LevelUpResult {
   newRank: Rank;
 }
 
-export async function saveSnapshotIfNeeded(characterId: string): Promise<void> {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const existing = await prisma.statSnapshot.findUnique({
+export async function saveSnapshotIfNeeded(characterId: string, today: Date, db: Db = prisma): Promise<void> {
+  const existing = await db.statSnapshot.findUnique({
     where: { characterId_date: { characterId, date: today } },
   });
   if (existing) return;
-  const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
-  await prisma.statSnapshot.create({
+  const char = await db.character.findUniqueOrThrow({ where: { id: characterId } });
+  await db.statSnapshot.create({
     data: { characterId, date: today, str: char.str, agi: char.agi, int: char.int, end: char.end, vit: char.vit, level: char.level },
   });
 }
 
-export async function applyXP(characterId: string, baseXp: number): Promise<LevelUpResult> {
-  const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
+export async function applyXP(characterId: string, baseXp: number, today: Date, db: Db = prisma): Promise<LevelUpResult> {
+  const char = await db.character.findUniqueOrThrow({ where: { id: characterId } });
 
   const oldLevel = char.level;
   const oldRank = char.rank;
@@ -73,13 +75,13 @@ export async function applyXP(characterId: string, baseXp: number): Promise<Leve
 
   const newRank = calcRank(level);
 
-  await prisma.character.update({
+  await db.character.update({
     where: { id: characterId },
     data: { level, xp, rank: newRank },
   });
 
   if (level > oldLevel) {
-    await saveSnapshotIfNeeded(characterId);
+    await saveSnapshotIfNeeded(characterId, today, db);
   }
 
   return {
@@ -92,7 +94,7 @@ export async function applyXP(characterId: string, baseXp: number): Promise<Leve
   };
 }
 
-export async function applyStats(characterId: string, rewards: Record<string, number>) {
+export async function applyStats(characterId: string, rewards: Record<string, number>, db: Db = prisma) {
   const update: Record<string, { increment: number }> = {};
   for (const [stat, val] of Object.entries(rewards)) {
     if (['str', 'agi', 'int', 'vit', 'end'].includes(stat) && val !== 0) {
@@ -100,7 +102,7 @@ export async function applyStats(characterId: string, rewards: Record<string, nu
     }
   }
   if (Object.keys(update).length > 0) {
-    await prisma.character.update({ where: { id: characterId }, data: update });
+    await db.character.update({ where: { id: characterId }, data: update });
   }
 }
 
@@ -116,63 +118,74 @@ export interface PenaltyResult {
   newRank: Rank;
 }
 
-export async function applyInactivityPenalty(characterId: string): Promise<PenaltyResult | null> {
-  const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
+/**
+ * Penalità inattività idempotente: applicata al massimo una volta per giorno
+ * e mai due volte per lo stesso intervallo (baseline = max(lastQuest, lastPenalty)).
+ */
+export async function applyInactivityPenalty(characterId: string, tz: string = DEFAULT_TZ): Promise<PenaltyResult | null> {
+  const today = todayFor(tz);
 
-  if (!char.lastQuestDate) return null;
+  return prisma.$transaction(async (tx) => {
+    const char = await tx.character.findUniqueOrThrow({ where: { id: characterId } });
+    if (!char.lastQuestDate) return null;
 
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+    // Già penalizzato oggi → idempotente
+    if (char.lastPenaltyDate && new Date(char.lastPenaltyDate).getTime() >= today.getTime()) {
+      return null;
+    }
 
-  const lastDate = new Date(char.lastQuestDate);
-  lastDate.setUTCHours(0, 0, 0, 0);
+    // Baseline: il più recente fra ultima quest e ultima penalità (no doppio conteggio)
+    const lastQuest = new Date(char.lastQuestDate);
+    lastQuest.setUTCHours(0, 0, 0, 0);
+    let baseline = lastQuest;
+    if (char.lastPenaltyDate) {
+      const lp = new Date(char.lastPenaltyDate);
+      lp.setUTCHours(0, 0, 0, 0);
+      if (lp > baseline) baseline = lp;
+    }
 
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const daysDiff = Math.floor((today.getTime() - lastDate.getTime()) / msPerDay);
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysDiff = Math.floor((today.getTime() - baseline.getTime()) / msPerDay);
+    if (daysDiff <= 1) return null;
 
-  if (daysDiff <= 1) return null;
+    const daysLost = Math.min(daysDiff - 1, 7);
+    const xpPerDay = char.level * 5;
+    const totalPenalty = xpPerDay * daysLost;
 
-  const daysLost = Math.min(daysDiff - 1, 7);
-  const xpPerDay = char.level * 5;
-  const totalPenalty = xpPerDay * daysLost;
+    const oldLevel = char.level;
+    const oldRank = char.rank;
 
-  const oldLevel = char.level;
-  const oldRank = char.rank;
+    let level = char.level;
+    let xp = char.xp - totalPenalty;
+    while (xp < 0 && level > 1) {
+      level--;
+      xp = level * 100 + xp;
+    }
+    xp = Math.max(0, xp);
 
-  let level = char.level;
-  let xp = char.xp - totalPenalty;
+    const newRank = calcRank(level);
 
-  while (xp < 0 && level > 1) {
-    level--;
-    xp = level * 100 + xp;
-  }
-  xp = Math.max(0, xp);
+    await tx.character.update({
+      where: { id: characterId },
+      data: { level, xp, rank: newRank, streak: 0, lastPenaltyDate: today },
+    });
 
-  const newRank = calcRank(level);
-
-  await prisma.character.update({
-    where: { id: characterId },
-    data: { level, xp, rank: newRank, streak: 0 },
+    return {
+      penaltyApplied: true,
+      daysLost,
+      xpLost: totalPenalty,
+      levelDown: level < oldLevel,
+      rankDown: newRank !== oldRank,
+      oldLevel,
+      newLevel: level,
+      oldRank,
+      newRank,
+    };
   });
-
-  return {
-    penaltyApplied: true,
-    daysLost,
-    xpLost: totalPenalty,
-    levelDown: level < oldLevel,
-    rankDown: newRank !== oldRank,
-    oldLevel,
-    newLevel: level,
-    oldRank,
-    newRank,
-  };
 }
 
-export async function updateStreak(characterId: string): Promise<{ streak: number; multiplier: number }> {
-  const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
-
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+export async function updateStreak(characterId: string, today: Date, db: Db = prisma): Promise<{ streak: number; multiplier: number }> {
+  const char = await db.character.findUniqueOrThrow({ where: { id: characterId } });
 
   const yesterday = new Date(today);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
@@ -191,7 +204,7 @@ export async function updateStreak(characterId: string): Promise<{ streak: numbe
 
   const bestStreak = Math.max(newStreak, char.bestStreak);
 
-  await prisma.character.update({
+  await db.character.update({
     where: { id: characterId },
     data: { streak: newStreak, bestStreak, lastQuestDate: today },
   });

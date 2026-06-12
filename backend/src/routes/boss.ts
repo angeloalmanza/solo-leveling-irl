@@ -5,18 +5,9 @@ import { generateWeeklyBoss } from '../services/aiService';
 import { applyXP, applyStats, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { getTimezone, weekStartFor, todayFor } from '../lib/dates';
 
 const router = Router();
-
-function getWeekStart(): Date {
-  const now = new Date();
-  const day = now.getDay(); // 0=dom, 1=lun...
-  const diff = day === 0 ? -6 : 1 - day; // porta a lunedì
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  monday.setUTCHours(0, 0, 0, 0);
-  return monday;
-}
 
 router.get('/weekly', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
@@ -24,7 +15,7 @@ router.get('/weekly', requireAuth, asyncHandler(async (req, res: Response) => {
     where: { userId },
   });
 
-  const weekStart = getWeekStart();
+  const weekStart = weekStartFor(await getTimezone(userId));
 
   let boss = await prisma.weeklyBoss.findUnique({
     where: { characterId_weekStart: { characterId: char.id, weekStart } },
@@ -104,7 +95,8 @@ router.post('/weekly/defeat', requireAuth, asyncHandler(async (req, res: Respons
     where: { userId },
   });
 
-  const weekStart = getWeekStart();
+  const tz = await getTimezone(userId);
+  const weekStart = weekStartFor(tz);
 
   const boss = await prisma.weeklyBoss.findUnique({
     where: { characterId_weekStart: { characterId: char.id, weekStart } },
@@ -122,7 +114,7 @@ router.post('/weekly/defeat', requireAuth, asyncHandler(async (req, res: Respons
     data: { defeatedAt: new Date() },
   });
 
-  const levelResult = await applyXP(char.id, boss.xpReward);
+  const levelResult = await applyXP(char.id, boss.xpReward, todayFor(tz));
   await applyStats(char.id, boss.statRewards as Record<string, number>);
   const newlyUnlocked = await runUnlockCheck(char.id);
 

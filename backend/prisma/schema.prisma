@@ -38,6 +38,7 @@ model UserProfile {
   age           Int
   sex           Sex
   activityLevel ActivityLevel
+  timezone      String   @default("Europe/Rome")
   updatedAt     DateTime @updatedAt
 }
 
@@ -59,6 +60,7 @@ model Character {
   streak                    Int                  @default(0)
   bestStreak                Int                  @default(0)
   lastQuestDate             DateTime?            @db.Date
+  lastPenaltyDate           DateTime?            @db.Date
   createdAt                 DateTime             @default(now())
   dailyQuests         DailyQuest[]
   mealLogs            MealLog[]
@@ -71,8 +73,10 @@ model Character {
   savedMeals          SavedMeal[]
   unlockedSkills      UnlockedSkill[]
   skills              Skill[]
+  weeklySummaries     WeeklySummary[]
 }
 
+// Solo per i fallback del seed; le quest AI sono denormalizzate su DailyQuest.
 model QuestTemplate {
   id          String        @id @default(cuid())
   title       String
@@ -85,16 +89,23 @@ model QuestTemplate {
 }
 
 model DailyQuest {
-  id              String        @id @default(cuid())
+  id              String         @id @default(cuid())
   characterId     String
-  character       Character     @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  questTemplateId String
-  questTemplate   QuestTemplate @relation(fields: [questTemplateId], references: [id])
-  date            DateTime      @db.Date
-  completed       Boolean       @default(false)
+  character       Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  questTemplateId String?
+  questTemplate   QuestTemplate? @relation(fields: [questTemplateId], references: [id])
+  // Dati della quest denormalizzati (niente più QuestTemplate per ogni quest AI)
+  title           String
+  description     String
+  category        QuestCategory
+  xpReward        Int
+  statRewards     Json
+  difficulty      Int            @default(1)
+  date            DateTime       @db.Date
+  completed       Boolean        @default(false)
   completedAt     DateTime?
 
-  @@unique([characterId, questTemplateId, date])
+  @@index([characterId, date])
 }
 
 model Food {
@@ -118,6 +129,20 @@ model MealLog {
   mealType    MealType
   items       MealItem[]
   createdAt   DateTime  @default(now())
+
+  @@unique([characterId, date, mealType])
+  @@index([characterId, date])
+}
+
+model WeeklySummary {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  weekStart   DateTime  @db.Date
+  summary     String
+  generatedAt DateTime  @default(now())
+
+  @@unique([characterId, weekStart])
 }
 
 model MealItem {

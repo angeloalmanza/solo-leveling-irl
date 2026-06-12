@@ -4,8 +4,7 @@ import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateWeeklySummary } from '../services/aiService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { aiLimiter } from '../middleware/rateLimit';
-
-const summaryCache = new Map<string, { summary: string; generatedAt: Date; date: string }>();
+import { getTimezone, weekStartFor } from '../lib/dates';
 
 const router = Router();
 
@@ -71,20 +70,16 @@ router.get('/weekly-summary', requireAuth, aiLimiter, asyncHandler(async (req, r
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
-  const todayKey = new Date().toISOString().split('T')[0];
-  const cacheKey = `${char.id}_${todayKey}`;
-  const cached = summaryCache.get(cacheKey);
-  if (cached) {
-    res.json(cached);
+  const weekStart = weekStartFor(await getTimezone(userId));
+
+  // Cache persistente: una sintesi per (personaggio, settimana)
+  const existing = await prisma.weeklySummary.findUnique({
+    where: { characterId_weekStart: { characterId: char.id, weekStart } },
+  });
+  if (existing) {
+    res.json({ summary: existing.summary, generatedAt: existing.generatedAt });
     return;
   }
-
-  const now = new Date();
-  const weekStart = new Date(now);
-  const day = now.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  weekStart.setUTCDate(now.getUTCDate() + diff);
-  weekStart.setUTCHours(0, 0, 0, 0);
 
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
@@ -152,9 +147,10 @@ router.get('/weekly-summary', requireAuth, aiLimiter, asyncHandler(async (req, r
     rank: char.rank,
   });
 
-  const result = { summary, generatedAt: new Date(), date: todayKey };
-  summaryCache.set(cacheKey, result);
-  res.json(result);
+  const saved = await prisma.weeklySummary.create({
+    data: { characterId: char.id, weekStart, summary },
+  });
+  res.json({ summary: saved.summary, generatedAt: saved.generatedAt });
 }));
 
 export default router;

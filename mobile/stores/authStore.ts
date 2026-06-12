@@ -39,7 +39,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   register: async (registerData) => {
-    const { data } = await api.post('/auth/register', registerData);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const { data } = await api.post('/auth/register', { ...registerData, timezone });
     await SecureStore.setItemAsync('accessToken', data.accessToken);
     await SecureStore.setItemAsync('refreshToken', data.refreshToken);
     set({ isAuthenticated: true, characterName: data.characterName });

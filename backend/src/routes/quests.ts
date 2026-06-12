@@ -1,285 +1,296 @@
 import { Router, Response } from 'express';
+import { DailyQuest, QuestCategory } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { applyXP, applyStats, updateStreak, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
-import { generateDailyQuests } from '../services/aiService';
+import { generateDailyQuests, generateSingleQuest, AIQuest } from '../services/aiService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { HttpError } from '../middleware/errorHandler';
 import { logger } from '../lib/logger';
 import { aiLimiter } from '../middleware/rateLimit';
+import { getTimezone, todayFor } from '../lib/dates';
 
 const router = Router();
 
-router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
-  try {
-    const userId = (req as AuthRequest).userId;
-    const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+const UNDO_WINDOW_MS = 10 * 60 * 1000;
 
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+/** Risposta compatibile col client: i campi denormalizzati restano sotto questTemplate. */
+function toApiQuest(q: DailyQuest) {
+  return {
+    id: q.id,
+    completed: q.completed,
+    completedAt: q.completedAt,
+    questTemplate: {
+      title: q.title,
+      description: q.description,
+      category: q.category,
+      xpReward: q.xpReward,
+      statRewards: q.statRewards,
+      difficulty: q.difficulty,
+    },
+  };
+}
 
-    const existing = await prisma.dailyQuest.findMany({
-      where: { characterId: character.id, date: today },
-      include: { questTemplate: true },
-      orderBy: { questTemplate: { category: 'asc' } },
-    });
+type QuestSeed = {
+  title: string;
+  description: string;
+  category: QuestCategory;
+  xpReward: number;
+  statRewards: object;
+  difficulty: number;
+};
 
-    if (existing.length > 0) {
-      res.json(existing);
-      return;
-    }
+function aiToSeed(q: AIQuest): QuestSeed {
+  return {
+    title: q.title,
+    description: q.description,
+    category: q.category as QuestCategory,
+    xpReward: q.xpReward,
+    statRewards: q.statRewards,
+    difficulty: q.difficulty,
+  };
+}
 
-    let aiQuests = null;
-    try {
-      aiQuests = await generateDailyQuests({
-        level: character.level,
-        rank: character.rank,
-        str: character.str,
-        agi: character.agi,
-        int: character.int,
-        end: character.end,
-        vit: character.vit,
-      });
-    } catch (err) {
-      logger.warn({ err }, 'AI quest generation failed, falling back to DB templates');
-    }
-
-    if (aiQuests && aiQuests.length >= 2) {
-      const fitness = aiQuests.filter((q) => q.category === 'fitness').slice(0, 2);
-      const mente = aiQuests.filter((q) => q.category === 'mente').slice(0, 2);
-      const toCreate = [...fitness, ...mente];
-
-      if (toCreate.length >= 2) {
-        const results: typeof existing = [];
-        for (const q of toCreate) {
-          const template = await prisma.questTemplate.create({
-            data: {
-              title: q.title,
-              description: q.description,
-              category: q.category as 'fitness' | 'mente',
-              xpReward: q.xpReward,
-              statRewards: q.statRewards,
-              difficulty: q.difficulty,
-            },
-          });
-          const dailyQuest = await prisma.dailyQuest.create({
-            data: { characterId: character.id, questTemplateId: template.id, date: today },
-            include: { questTemplate: true },
-          });
-          results.push(dailyQuest);
-        }
-        res.json(results);
-        return;
-      }
-    }
-
-    // Fallback: random from existing templates
-    const fitnessTemplates = await prisma.questTemplate.findMany({ where: { category: 'fitness' } });
-    const menteTemplates = await prisma.questTemplate.findMany({ where: { category: 'mente' } });
-    const pick = <T>(arr: T[], n: number): T[] => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
-    const selected = [...pick(fitnessTemplates, 2), ...pick(menteTemplates, 2)];
-
-    const created = await prisma.$transaction(
-      selected.map((t) =>
-        prisma.dailyQuest.create({
-          data: { characterId: character.id, questTemplateId: t.id, date: today },
-          include: { questTemplate: true },
-        })
-      )
+async function createQuests(characterId: string, date: Date, seeds: QuestSeed[]): Promise<DailyQuest[]> {
+  const created: DailyQuest[] = [];
+  for (const s of seeds) {
+    created.push(
+      await prisma.dailyQuest.create({
+        data: { characterId, date, ...s, statRewards: s.statRewards as object },
+      })
     );
-
-    res.json(created);
-  } catch (err) {
-    logger.error({ err }, 'GET /daily error');
-    res.status(500).json({ error: 'Errore nel caricamento delle quest' });
   }
+  return created;
+}
+
+async function fallbackSeeds(fitnessNeeded: number, menteNeeded: number): Promise<QuestSeed[]> {
+  const pick = <T>(arr: T[], n: number): T[] => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
+  const ft = await prisma.questTemplate.findMany({ where: { category: 'fitness' } });
+  const mt = await prisma.questTemplate.findMany({ where: { category: 'mente' } });
+  return [...pick(ft, fitnessNeeded), ...pick(mt, menteNeeded)].map((t) => ({
+    title: t.title,
+    description: t.description,
+    category: t.category,
+    xpReward: t.xpReward,
+    statRewards: t.statRewards as object,
+    difficulty: t.difficulty,
+  }));
+}
+
+router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const today = todayFor(await getTimezone(userId));
+
+  const existing = await prisma.dailyQuest.findMany({
+    where: { characterId: character.id, date: today },
+    orderBy: { category: 'asc' },
+  });
+  if (existing.length > 0) {
+    res.json(existing.map(toApiQuest));
+    return;
+  }
+
+  let seeds: QuestSeed[] | null = null;
+  try {
+    const ai = await generateDailyQuests(character);
+    const fitness = ai.filter((q) => q.category === 'fitness').slice(0, 2);
+    const mente = ai.filter((q) => q.category === 'mente').slice(0, 2);
+    if (fitness.length + mente.length >= 2) {
+      seeds = [...fitness, ...mente].map(aiToSeed);
+    }
+  } catch (err) {
+    logger.warn({ err }, 'AI quest generation failed, falling back to DB templates');
+  }
+
+  if (!seeds) {
+    seeds = await fallbackSeeds(2, 2);
+  }
+
+  const created = await createQuests(character.id, today, seeds);
+  res.json(created.map(toApiQuest));
 }));
 
-router.post('/daily/refresh', requireAuth, asyncHandler(async (req, res: Response) => {
-  try {
-    const userId = (req as AuthRequest).userId;
-    const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+router.post('/daily/refresh', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const today = todayFor(await getTimezone(userId));
 
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+  const todayQuests = await prisma.dailyQuest.findMany({
+    where: { characterId: character.id, date: today },
+  });
 
-    const todayQuests = await prisma.dailyQuest.findMany({
-      where: { characterId: character.id, date: today },
-      include: { questTemplate: true },
-    });
+  const completed = todayQuests.filter((q) => q.completed);
+  const fitnessCompleted = completed.filter((q) => q.category === 'fitness').length;
+  const menteCompleted = completed.filter((q) => q.category === 'mente').length;
+  const fitnessNeeded = Math.max(0, 2 - fitnessCompleted);
+  const menteNeeded = Math.max(0, 2 - menteCompleted);
 
-    const completed = todayQuests.filter((q) => q.completed);
-    const fitnessCompleted = completed.filter((q) => q.questTemplate.category === 'fitness').length;
-    const menteCompleted = completed.filter((q) => q.questTemplate.category === 'mente').length;
-    const fitnessNeeded = Math.max(0, 2 - fitnessCompleted);
-    const menteNeeded = Math.max(0, 2 - menteCompleted);
+  await prisma.dailyQuest.deleteMany({
+    where: { characterId: character.id, date: today, completed: false },
+  });
 
-    await prisma.dailyQuest.deleteMany({
-      where: { characterId: character.id, date: today, completed: false },
-    });
-
-    if (fitnessNeeded === 0 && menteNeeded === 0) {
-      res.json(completed);
-      return;
-    }
-
-    let aiQuests = null;
-    try {
-      aiQuests = await generateDailyQuests({
-        level: character.level, rank: character.rank,
-        str: character.str, agi: character.agi, int: character.int,
-        end: character.end, vit: character.vit,
-      });
-    } catch (err) {
-      logger.warn({ err }, 'AI quest generation failed on refresh');
-    }
-
-    const newDailyQuests: typeof todayQuests = [];
-
-    if (aiQuests) {
-      const newFitness = aiQuests.filter((q) => q.category === 'fitness').slice(0, fitnessNeeded);
-      const newMente = aiQuests.filter((q) => q.category === 'mente').slice(0, menteNeeded);
-      for (const q of [...newFitness, ...newMente]) {
-        const template = await prisma.questTemplate.create({
-          data: {
-            title: q.title, description: q.description,
-            category: q.category as 'fitness' | 'mente',
-            xpReward: q.xpReward, statRewards: q.statRewards, difficulty: q.difficulty,
-          },
-        });
-        const dq = await prisma.dailyQuest.create({
-          data: { characterId: character.id, questTemplateId: template.id, date: today },
-          include: { questTemplate: true },
-        });
-        newDailyQuests.push(dq);
-      }
-    } else {
-      const pick = <T>(arr: T[], n: number): T[] => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
-      const ft = await prisma.questTemplate.findMany({ where: { category: 'fitness' } });
-      const mt = await prisma.questTemplate.findMany({ where: { category: 'mente' } });
-      for (const t of [...pick(ft, fitnessNeeded), ...pick(mt, menteNeeded)]) {
-        const dq = await prisma.dailyQuest.create({
-          data: { characterId: character.id, questTemplateId: t.id, date: today },
-          include: { questTemplate: true },
-        });
-        newDailyQuests.push(dq);
-      }
-    }
-
-    res.json([...completed, ...newDailyQuests]);
-  } catch (err) {
-    logger.error({ err }, 'Refresh quests error');
-    res.status(500).json({ error: 'Errore nel refresh delle quest' });
+  if (fitnessNeeded === 0 && menteNeeded === 0) {
+    res.json(completed.map(toApiQuest));
+    return;
   }
+
+  let seeds: QuestSeed[] | null = null;
+  try {
+    const ai = await generateDailyQuests(character);
+    const newFitness = ai.filter((q) => q.category === 'fitness').slice(0, fitnessNeeded);
+    const newMente = ai.filter((q) => q.category === 'mente').slice(0, menteNeeded);
+    seeds = [...newFitness, ...newMente].map(aiToSeed);
+  } catch (err) {
+    logger.warn({ err }, 'AI quest generation failed on refresh');
+    seeds = await fallbackSeeds(fitnessNeeded, menteNeeded);
+  }
+
+  const created = await createQuests(character.id, today, seeds);
+  res.json([...completed, ...created].map(toApiQuest));
 }));
 
 router.post('/daily/:id/reroll', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const today = todayFor(await getTimezone(userId));
+
+  const quest = await prisma.dailyQuest.findFirst({
+    where: { id: req.params.id, characterId: character.id },
+  });
+  if (!quest) throw new HttpError(404, 'Quest not found');
+  if (quest.completed) throw new HttpError(400, 'Quest già completata');
+
+  const category = quest.category;
+  const otherTitles = (
+    await prisma.dailyQuest.findMany({
+      where: { characterId: character.id, date: today, id: { not: quest.id } },
+      select: { title: true },
+    })
+  ).map((q) => q.title);
+
+  let seed: QuestSeed;
   try {
-    const userId = (req as AuthRequest).userId;
-    const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
-
-    const quest = await prisma.dailyQuest.findFirst({
-      where: { id: req.params.id, characterId: character.id },
-      include: { questTemplate: true },
-    });
-
-    if (!quest) { res.status(404).json({ error: 'Quest not found' }); return; }
-    if (quest.completed) { res.status(400).json({ error: 'Quest già completata' }); return; }
-
-    const category = quest.questTemplate.category;
-    await prisma.dailyQuest.delete({ where: { id: quest.id } });
-
-    let newQuest = null;
-    try {
-      const aiQuests = await generateDailyQuests({
-        level: character.level, rank: character.rank,
-        str: character.str, agi: character.agi, int: character.int,
-        end: character.end, vit: character.vit,
-      });
-      newQuest = aiQuests.find((q) => q.category === category) ?? aiQuests[0];
-    } catch (err) {
-      logger.warn({ err }, 'AI reroll failed');
-    }
-
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-
-    let template;
-    if (newQuest) {
-      template = await prisma.questTemplate.create({
-        data: {
-          title: newQuest.title, description: newQuest.description,
-          category: category, xpReward: newQuest.xpReward,
-          statRewards: newQuest.statRewards, difficulty: newQuest.difficulty,
-        },
-      });
-    } else {
-      const fallbacks = await prisma.questTemplate.findMany({ where: { category } });
-      template = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-    }
-
-    const created = await prisma.dailyQuest.create({
-      data: { characterId: character.id, questTemplateId: template.id, date: today },
-      include: { questTemplate: true },
-    });
-
-    res.json(created);
+    const newQuest = await generateSingleQuest(character, category, otherTitles);
+    seed = aiToSeed(newQuest);
   } catch (err) {
-    logger.error({ err }, 'Reroll quest error');
-    res.status(500).json({ error: 'Errore nel reroll' });
+    logger.warn({ err }, 'AI reroll failed, using fallback template');
+    const fallbacks = await prisma.questTemplate.findMany({ where: { category } });
+    const t = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    seed = {
+      title: t.title,
+      description: t.description,
+      category: t.category,
+      xpReward: t.xpReward,
+      statRewards: t.statRewards as object,
+      difficulty: t.difficulty,
+    };
   }
+
+  await prisma.dailyQuest.delete({ where: { id: quest.id } });
+  const created = await prisma.dailyQuest.create({
+    data: { characterId: character.id, date: today, ...seed, statRewards: seed.statRewards as object },
+  });
+  res.json(toApiQuest(created));
 }));
 
 router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const today = todayFor(await getTimezone(userId));
 
   const quest = await prisma.dailyQuest.findFirst({
     where: { id: req.params.id, characterId: character.id },
-    include: { questTemplate: true },
   });
+  if (!quest) throw new HttpError(404, 'Quest not found');
 
-  if (!quest) {
-    res.status(404).json({ error: 'Quest not found' });
-    return;
-  }
+  const statRewards = quest.statRewards as Record<string, number>;
+
+  // ── UNDO ──────────────────────────────────────────────────────────────
   if (quest.completed) {
-    // Undo: remove XP and stats
-    const statRewards = quest.questTemplate.statRewards as Record<string, number>;
-    const negativeStats = Object.fromEntries(
-      Object.entries(statRewards).map(([k, v]) => [k, -v])
-    );
-    await applyStats(character.id, negativeStats);
-    await prisma.character.update({
-      where: { id: character.id },
-      data: { xp: { decrement: quest.questTemplate.xpReward } },
+    if (!quest.completedAt || Date.now() - new Date(quest.completedAt).getTime() > UNDO_WINDOW_MS) {
+      throw new HttpError(400, 'Troppo tardi per annullare (max 10 minuti)');
+    }
+
+    const outcome = await prisma.$transaction(async (tx) => {
+      // Anti double-tap: procede solo se è ancora completata
+      const undo = await tx.dailyQuest.updateMany({
+        where: { id: quest.id, characterId: character.id, completed: true },
+        data: { completed: false, completedAt: null },
+      });
+      if (undo.count !== 1) return { noop: true as const };
+
+      const char = await tx.character.findUniqueOrThrow({ where: { id: character.id } });
+      // Se rimuovere l'XP richiederebbe un level-down, l'undo è bloccato
+      if (char.xp - quest.xpReward < 0) return { blocked: true as const };
+
+      const negativeStats = Object.fromEntries(Object.entries(statRewards).map(([k, v]) => [k, -v]));
+      await applyStats(character.id, negativeStats, tx);
+      await tx.character.update({
+        where: { id: character.id },
+        data: { xp: { decrement: quest.xpReward } },
+      });
+      return { undone: true as const };
     });
-    await prisma.dailyQuest.update({
-      where: { id: quest.id },
-      data: { completed: false, completedAt: null },
-    });
+
+    if ('blocked' in outcome) {
+      // ripristina lo stato completato (era stato messo a false nel updateMany)
+      await prisma.dailyQuest.update({
+        where: { id: quest.id },
+        data: { completed: true, completedAt: quest.completedAt },
+      });
+      throw new HttpError(400, 'Non puoi annullare: la quest ha già fatto salire di livello');
+    }
+
     const updatedCharacter = await prisma.character.findUniqueOrThrow({ where: { id: character.id } });
-    res.json({ character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) }, leveledUp: false, rankedUp: false, newlyUnlocked: [], undone: true });
+    res.json({
+      character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) },
+      leveledUp: false,
+      rankedUp: false,
+      newlyUnlocked: { shadows: [], achievements: [] },
+      undone: true,
+    });
     return;
   }
 
-  await prisma.dailyQuest.update({
-    where: { id: quest.id },
-    data: { completed: true, completedAt: new Date() },
+  // ── COMPLETE ──────────────────────────────────────────────────────────
+  const outcome = await prisma.$transaction(async (tx) => {
+    const upd = await tx.dailyQuest.updateMany({
+      where: { id: quest.id, characterId: character.id, completed: false },
+      data: { completed: true, completedAt: new Date() },
+    });
+    if (upd.count !== 1) return { alreadyDone: true as const };
+
+    await applyStats(character.id, statRewards, tx);
+    const { streak, multiplier } = await updateStreak(character.id, today, tx);
+    const levelResult = await applyXP(character.id, quest.xpReward, today, tx);
+    return { levelResult, streak, multiplier };
   });
 
-  const statRewards = quest.questTemplate.statRewards as Record<string, number>;
-  await applyStats(character.id, statRewards);
-
-  const { streak, multiplier } = await updateStreak(character.id);
-  const levelResult = await applyXP(character.id, quest.questTemplate.xpReward);
+  if ('alreadyDone' in outcome) {
+    const updatedCharacter = await prisma.character.findUniqueOrThrow({ where: { id: character.id } });
+    res.json({
+      character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) },
+      leveledUp: false,
+      rankedUp: false,
+      newlyUnlocked: { shadows: [], achievements: [] },
+    });
+    return;
+  }
 
   const [updatedCharacter, newlyUnlocked] = await Promise.all([
     prisma.character.findUniqueOrThrow({ where: { id: character.id } }),
     runUnlockCheck(character.id),
   ]);
 
-  res.json({ character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) }, ...levelResult, newlyUnlocked, streak, multiplier });
+  res.json({
+    character: { ...updatedCharacter, activeTitle: getDynamicTitle(updatedCharacter) },
+    ...outcome.levelResult,
+    newlyUnlocked,
+    streak: outcome.streak,
+    multiplier: outcome.multiplier,
+  });
 }));
 
 export default router;

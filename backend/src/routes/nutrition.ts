@@ -9,17 +9,12 @@ import { runUnlockCheck } from '../services/unlockService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { logger } from '../lib/logger';
 import { aiLimiter } from '../middleware/rateLimit';
+import { getTimezone, todayFor } from '../lib/dates';
 
 const router = Router();
 
 // Limite massimo per l'immagine base64 (~7.5MB binari ≈ 10MB base64)
 const MAX_IMAGE_BASE64_LEN = 10 * 1024 * 1024;
-
-function today() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 function calcMealTotals(items: { quantity: number; food: { calories: number; protein: number; carbs: number; fat: number } }[]) {
   return items.reduce(
@@ -52,12 +47,13 @@ router.get('/goals', requireAuth, asyncHandler(async (req, res: Response) => {
 
 router.get('/today', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
+  const todayDate = todayFor(await getTimezone(userId));
   const character = await prisma.character.findUniqueOrThrow({
     where: { userId },
     include: {
       nutritionGoal: true,
       mealLogs: {
-        where: { date: today() },
+        where: { date: todayDate },
         include: { items: { include: { food: true } } },
         orderBy: { createdAt: 'asc' },
       },
@@ -90,7 +86,6 @@ router.get('/today', requireAuth, asyncHandler(async (req, res: Response) => {
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
-  const todayDate = today();
   const rewardGiven = character.lastNutritionRewardDate?.getTime() === todayDate.getTime();
 
   res.json({
@@ -153,13 +148,13 @@ router.post('/meals', requireAuth, asyncHandler(async (req, res: Response) => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
-  const existing = await prisma.mealLog.findFirst({
-    where: { characterId: character.id, date: today(), mealType: parsed.data.mealType },
-  });
-  if (existing) { res.json(existing); return; }
+  const date = todayFor(await getTimezone(userId));
 
-  const meal = await prisma.mealLog.create({
-    data: { characterId: character.id, date: today(), mealType: parsed.data.mealType },
+  // upsert sul vincolo unico: niente più doppioni da richieste concorrenti
+  const meal = await prisma.mealLog.upsert({
+    where: { characterId_date_mealType: { characterId: character.id, date, mealType: parsed.data.mealType } },
+    create: { characterId: character.id, date, mealType: parsed.data.mealType },
+    update: {},
   });
   res.status(201).json(meal);
 }));
@@ -181,7 +176,7 @@ router.post('/meals/:id/items', requireAuth, asyncHandler(async (req, res: Respo
     include: { food: true },
   });
 
-  await checkAndGrantVitReward(character.id, userId);
+  await checkAndGrantVitReward(character.id, todayFor(await getTimezone(userId)));
 
   res.status(201).json(item);
 }));
@@ -196,14 +191,13 @@ router.delete('/meals/:mealId/items/:itemId', requireAuth, asyncHandler(async (r
   res.status(204).send();
 }));
 
-async function checkAndGrantVitReward(characterId: string, _userId: string) {
+async function checkAndGrantVitReward(characterId: string, todayDate: Date) {
   const character = await prisma.character.findUniqueOrThrow({
     where: { id: characterId },
     include: { nutritionGoal: true },
   });
   if (!character.nutritionGoal) return;
 
-  const todayDate = today();
   if (character.lastNutritionRewardDate?.getTime() === todayDate.getTime()) return;
 
   const meals = await prisma.mealLog.findMany({
@@ -234,7 +228,7 @@ async function checkAndGrantVitReward(characterId: string, _userId: string) {
   if (pct >= 0.8) {
     await prisma.character.update({ where: { id: characterId }, data: { lastNutritionRewardDate: todayDate } });
     await applyStats(characterId, { vit: 1 });
-    await applyXP(characterId, 50);
+    await applyXP(characterId, 50, todayDate);
     await runUnlockCheck(characterId);
   }
 }
@@ -332,15 +326,12 @@ router.post('/saved-meals/:id/use', requireAuth, asyncHandler(async (req, res: R
   const saved = await prisma.savedMeal.findFirst({ where: { id: req.params.id, characterId: char.id } });
   if (!saved) { res.status(404).json({ error: 'Pasto salvato non trovato' }); return; }
 
-  const todayDate = today();
-  let mealLog = await prisma.mealLog.findFirst({
-    where: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType },
+  const todayDate = todayFor(await getTimezone(userId));
+  const mealLog = await prisma.mealLog.upsert({
+    where: { characterId_date_mealType: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType } },
+    create: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType },
+    update: {},
   });
-  if (!mealLog) {
-    mealLog = await prisma.mealLog.create({
-      data: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType },
-    });
-  }
 
   const items = saved.items as { foodId: string; quantity: number }[];
   for (const item of items) {
@@ -352,7 +343,7 @@ router.post('/saved-meals/:id/use', requireAuth, asyncHandler(async (req, res: R
     }
   }
 
-  await checkAndGrantVitReward(char.id, userId);
+  await checkAndGrantVitReward(char.id, todayDate);
   res.json({ success: true });
 }));
 

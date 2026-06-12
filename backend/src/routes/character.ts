@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { applyInactivityPenalty, getDynamicTitle, saveSnapshotIfNeeded } from '../services/levelService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { getTimezone, todayFor } from '../lib/dates';
 
 const router = Router();
 
@@ -18,7 +19,8 @@ router.get('/me', requireAuth, asyncHandler(async (req, res: Response) => {
     return;
   }
 
-  const penalty = await applyInactivityPenalty(character.id);
+  const tz = await getTimezone(userId);
+  const penalty = await applyInactivityPenalty(character.id, tz);
 
   if (penalty) {
     character = await prisma.character.findUniqueOrThrow({
@@ -27,7 +29,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res: Response) => {
     });
   }
 
-  await saveSnapshotIfNeeded(character.id);
+  await saveSnapshotIfNeeded(character.id, todayFor(tz));
   const activeTitle = getDynamicTitle(character);
   res.json({ ...character, activeTitle, penalty: penalty ?? null });
 }));
