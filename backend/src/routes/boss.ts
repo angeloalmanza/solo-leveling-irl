@@ -8,8 +8,27 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { HttpError } from '../middleware/errorHandler';
 import { weekStartFor, todayFor } from '../lib/dates';
 import { getUserContext } from '../lib/userContext';
+import { logger } from '../lib/logger';
 
 const router = Router();
+
+/** Boss generico usato quando l'AI non è disponibile (quota/errore Groq). */
+function fallbackBoss(level: number) {
+  const xpReward = Math.round((25 + level * 1.5) * 3);
+  return {
+    name: 'Sovrano delle Ombre',
+    description: 'Un nemico oscuro evocato dal Sistema.',
+    lore: 'Quando il Sistema tace, le ombre avanzano comunque. Affrontale con la costanza, Hunter: solo chi non si ferma può spezzarne il dominio.',
+    xpReward,
+    statRewards: { str: 3, agi: 2, end: 2 } as Record<string, number>,
+    difficulty: 3,
+    tasks: [
+      { title: 'Forgia il Corpo', description: 'Completa un allenamento di forza a tua scelta.' },
+      { title: 'Tempra la Resistenza', description: '30 minuti di attività cardio (corsa, camminata veloce, bici).' },
+      { title: 'Affila la Mente', description: '20 minuti di lettura o studio concentrato, senza distrazioni.' },
+    ],
+  };
+}
 
 router.get('/weekly', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
@@ -25,15 +44,21 @@ router.get('/weekly', requireAuth, asyncHandler(async (req, res: Response) => {
   });
 
   if (!boss) {
-    const generated = await generateWeeklyBoss({
-      level: char.level,
-      rank: char.rank,
-      str: char.str,
-      agi: char.agi,
-      int: char.int,
-      end: char.end,
-      vit: char.vit,
-    });
+    let generated;
+    try {
+      generated = await generateWeeklyBoss({
+        level: char.level,
+        rank: char.rank,
+        str: char.str,
+        agi: char.agi,
+        int: char.int,
+        end: char.end,
+        vit: char.vit,
+      });
+    } catch (err) {
+      logger.warn({ err }, 'AI boss generation failed, using fallback boss');
+      generated = fallbackBoss(char.level);
+    }
 
     boss = await prisma.weeklyBoss.create({
       data: {

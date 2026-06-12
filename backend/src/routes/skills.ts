@@ -1,12 +1,13 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
-import { generateSkillTree } from '../services/aiService';
+import { generateSkillTree, AISkill } from '../services/aiService';
 import { applyStats, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { HttpError } from '../middleware/errorHandler';
 import { aiLimiter } from '../middleware/rateLimit';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -19,6 +20,19 @@ interface CharacterLike {
   int: number;
   end: number;
   vit: number;
+}
+
+/** Albero di base usato quando l'AI non è disponibile (quota/errore Groq). */
+function fallbackSkillTree(level: number): AISkill[] {
+  const L = (n: number) => Math.max(1, level + n);
+  return [
+    { name: 'Forza Latente', description: 'Il corpo ricorda ogni sforzo. +2 STR.', type: 'passive', unlockLevel: L(0), statBonus: { str: 2 }, parentSkillName: null },
+    { name: 'Potenza Bruta', description: 'La forza diventa dominio. +3 STR.', type: 'passive', unlockLevel: L(5), statBonus: { str: 3 }, parentSkillName: 'Forza Latente' },
+    { name: 'Riflessi Affilati', description: 'Reagisci prima di pensare. +2 AGI.', type: 'passive', unlockLevel: L(0), statBonus: { agi: 2 }, parentSkillName: null },
+    { name: 'Passo d’Ombra', description: 'Velocità oltre il limite. +3 AGI.', type: 'passive', unlockLevel: L(5), statBonus: { agi: 3 }, parentSkillName: 'Riflessi Affilati' },
+    { name: 'Mente Lucida', description: 'La concentrazione è un’arma. +2 INT.', type: 'passive', unlockLevel: L(0), statBonus: { int: 2 }, parentSkillName: null },
+    { name: 'Tempra di Ferro', description: 'Resisti dove altri cedono. +2 END +1 VIT.', type: 'passive', unlockLevel: L(3), statBonus: { end: 2, vit: 1 }, parentSkillName: 'Mente Lucida' },
+  ];
 }
 
 async function buildSkillTree(characterId: string) {
@@ -35,7 +49,13 @@ async function ensureSkillTree(character: CharacterLike) {
   const existing = await prisma.skill.count({ where: { characterId: character.id } });
   if (existing > 0) return;
 
-  const generated = await generateSkillTree(character);
+  let generated: AISkill[];
+  try {
+    generated = await generateSkillTree(character);
+  } catch (err) {
+    logger.warn({ err }, 'AI skill tree generation failed, using fallback tree');
+    generated = fallbackSkillTree(character.level);
+  }
 
   // Creazione per livelli: crea una skill solo quando il suo genitore è già
   // stato creato (o è una radice). Itera finché si fa progresso; le skill con
