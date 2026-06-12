@@ -221,10 +221,13 @@ router.post('/daily/:id/reroll', requireAuth, aiLimiter, asyncHandler(async (req
     };
   }
 
-  await prisma.dailyQuest.delete({ where: { id: quest.id } });
-  const created = await prisma.dailyQuest.create({
-    data: { characterId: character.id, date: today, ...seed, statRewards: seed.statRewards as object },
-  });
+  // Atomico: niente quest persa se la create fallisse dopo la delete
+  const [, created] = await prisma.$transaction([
+    prisma.dailyQuest.delete({ where: { id: quest.id } }),
+    prisma.dailyQuest.create({
+      data: { characterId: character.id, date: today, ...seed, statRewards: seed.statRewards as object },
+    }),
+  ]);
   res.json(toApiQuest(created));
 }));
 
