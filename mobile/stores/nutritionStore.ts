@@ -67,7 +67,7 @@ interface NutritionState {
   clearSearch: () => void;
   fetchSavedMeals: () => Promise<void>;
   saveMeal: (mealLogId: string, name: string) => Promise<void>;
-  useSavedMeal: (savedMealId: string, mealType: MealLog['mealType']) => Promise<void>;
+  applySavedMeal: (savedMealId: string, mealType: MealLog['mealType']) => Promise<void>;
   deleteSavedMeal: (id: string) => Promise<void>;
   updateGoals: (goals: { calories: number; protein: number; carbs: number; fat: number }) => Promise<void>;
   resetGoals: () => Promise<void>;
@@ -148,7 +148,7 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
     await get().fetchSavedMeals();
   },
 
-  useSavedMeal: async (savedMealId: string, mealType: MealLog['mealType']) => {
+  applySavedMeal: async (savedMealId: string, mealType: MealLog['mealType']) => {
     await api.post(`/nutrition/saved-meals/${savedMealId}/use`, { mealType });
     await get().fetchToday();
   },

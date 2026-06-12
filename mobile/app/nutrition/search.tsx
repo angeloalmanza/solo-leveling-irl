@@ -26,7 +26,7 @@ interface ParsedResult {
 
 export default function FoodSearchScreen() {
   const { mealType } = useLocalSearchParams<{ mealType: MealLog['mealType'] }>();
-  const { aiParseFood, addMealItem, savedMeals, fetchSavedMeals, saveMeal, useSavedMeal, deleteSavedMeal } = useNutritionStore();
+  const { aiParseFood, addMealItem, savedMeals, fetchSavedMeals, saveMeal, applySavedMeal, deleteSavedMeal } = useNutritionStore();
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -71,7 +71,7 @@ export default function FoodSearchScreen() {
   async function handleUseSaved(meal: SavedMeal) {
     if (!mealType) return;
     try {
-      await useSavedMeal(meal.id, mealType);
+      await applySavedMeal(meal.id, mealType);
       setShowSaved(false);
       router.back();
     } catch {
