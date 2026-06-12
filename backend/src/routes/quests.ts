@@ -115,9 +115,19 @@ router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
 
   const difficultyHint = await computeDifficultyHint(character.id, today);
 
+  // Titoli fitness degli ultimi 6 giorni: evita ripetizioni e abilita il recupero attivo
+  const sixDaysAgo = new Date(today);
+  sixDaysAgo.setUTCDate(sixDaysAgo.getUTCDate() - 6);
+  const recentFitness = await prisma.dailyQuest.findMany({
+    where: { characterId: character.id, category: 'fitness', date: { gte: sixDaysAgo, lt: today } },
+    select: { title: true },
+    orderBy: { date: 'desc' },
+  });
+  const recentQuests = recentFitness.map((r) => r.title);
+
   let seeds: QuestSeed[] | null = null;
   try {
-    const ai = await generateDailyQuests(character, { goals, difficultyHint });
+    const ai = await generateDailyQuests(character, { goals, difficultyHint, recentQuests });
     const fitness = ai.filter((q) => q.category === 'fitness').slice(0, 2);
     const mente = ai.filter((q) => q.category === 'mente').slice(0, 2);
     if (fitness.length + mente.length >= 2) {
