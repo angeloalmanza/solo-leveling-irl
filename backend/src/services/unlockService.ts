@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 const RANK_ORDER: Rank[] = ['E', 'D', 'C', 'B', 'A', 'S'];
 const rankIndex = (r: Rank) => RANK_ORDER.indexOf(r);
 
-async function evalCondition(condition: string, characterId: string): Promise<boolean> {
+export async function evalCondition(condition: string, characterId: string): Promise<boolean> {
   const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
 
   if (condition.startsWith('rank_')) {
