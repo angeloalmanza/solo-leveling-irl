@@ -19,14 +19,14 @@ export default function StatusScreen() {
   useEffect(() => {
     if (!lastPenalty) return;
     const lines = [
-      `Hai saltato ${lastPenalty.daysLost} giorno${lastPenalty.daysLost > 1 ? 'i' : ''} senza completare quest.`,
-      `Hai perso ${lastPenalty.xpLost} XP.`,
+      `Sei stato assente ${lastPenalty.daysLost} giorno${lastPenalty.daysLost > 1 ? 'i' : ''} e hai perso ${lastPenalty.xpLost} XP.`,
       lastPenalty.levelDown ? `Sei sceso al livello ${lastPenalty.newLevel}.` : '',
       lastPenalty.rankDown ? `Sei retrocesso di Rank.` : '',
-      '\nLa streak è stata azzerata.',
+      '\nMa il Sistema non abbandona i suoi Hunter.',
+      'Una QUEST DI RITORNO ti aspetta: completala per recuperare parte dell\'XP e riaccendere la streak.',
     ].filter(Boolean).join('\n');
 
-    Alert.alert('⚠ PENALITÀ INATTIVITÀ', lines, [
+    Alert.alert('[ IL SISTEMA TI ASPETTAVA ]', lines, [
       { text: 'Capito', onPress: clearPenalty },
     ]);
   }, [lastPenalty]);

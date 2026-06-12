@@ -129,6 +129,40 @@ describe('POST /quests/daily/:id/feedback', () => {
   });
 });
 
+describe('Quest di Ritorno (recovery)', () => {
+  async function recoverySetup() {
+    const reg = await request(app).post('/v1/auth/register').send(user);
+    const token = reg.body.accessToken as string;
+    const character = await prisma.character.findFirstOrThrow();
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const quest = await prisma.dailyQuest.create({
+      data: {
+        characterId: character.id, date: today,
+        title: 'Ritorno', description: 'd', category: 'fitness',
+        xpReward: 20, statRewards: { vit: 1 }, difficulty: 1,
+        isRecovery: true, recoveryBonusXp: 30,
+      },
+    });
+    return { token, characterId: character.id, quest };
+  }
+
+  it('completamento → streak 3 e XP = reward + bonus', async () => {
+    const { token, characterId, quest } = await recoverySetup();
+    await request(app).post(`/v1/quests/daily/${quest.id}/complete`).set('Authorization', `Bearer ${token}`);
+    const char = await prisma.character.findUniqueOrThrow({ where: { id: characterId } });
+    expect(char.streak).toBe(3);
+    expect(char.xp).toBe(20 + 30);
+  });
+
+  it('undo su recovery → 400', async () => {
+    const { token, quest } = await recoverySetup();
+    await request(app).post(`/v1/quests/daily/${quest.id}/complete`).set('Authorization', `Bearer ${token}`);
+    const undo = await request(app).post(`/v1/quests/daily/${quest.id}/complete`).set('Authorization', `Bearer ${token}`);
+    expect(undo.status).toBe(400);
+  });
+});
+
 describe('computeDifficultyHint', () => {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);

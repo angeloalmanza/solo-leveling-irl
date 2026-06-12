@@ -28,6 +28,28 @@ router.get('/me', requireAuth, asyncHandler(async (req, res: Response) => {
       where: { userId },
       include: { unlockedAchievements: { include: { achievement: true } } },
     });
+
+    // Quest di Ritorno: una sola per giorno, solo se non già presente
+    const today = todayFor(tz);
+    const existing = await prisma.dailyQuest.findFirst({
+      where: { characterId: character.id, date: today, isRecovery: true },
+    });
+    if (!existing) {
+      await prisma.dailyQuest.create({
+        data: {
+          characterId: character.id,
+          date: today,
+          title: 'Quest di Ritorno: Rientro nel Sistema',
+          description: '15 minuti di camminata o stretching. Il Sistema ti aspettava, Hunter.',
+          category: 'fitness',
+          xpReward: 20,
+          statRewards: { vit: 1 },
+          difficulty: 1,
+          isRecovery: true,
+          recoveryBonusXp: Math.floor(penalty.xpLost / 2),
+        },
+      });
+    }
   }
 
   await saveSnapshotIfNeeded(character.id, todayFor(tz));

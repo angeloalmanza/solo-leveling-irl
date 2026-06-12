@@ -232,6 +232,9 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
 
   // ── UNDO ──────────────────────────────────────────────────────────────
   if (quest.completed) {
+    if (quest.isRecovery) {
+      throw new HttpError(400, 'Le Quest di Ritorno non possono essere annullate');
+    }
     if (!quest.completedAt || Date.now() - new Date(quest.completedAt).getTime() > UNDO_WINDOW_MS) {
       throw new HttpError(400, 'Troppo tardi per annullare (max 10 minuti)');
     }
@@ -282,9 +285,21 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
     if (upd.count !== 1) return { alreadyDone: true as const };
 
     await applyStats(character.id, statRewards, tx);
-    const { streak, multiplier } = await updateStreak(character.id, today, tx);
-    const levelResult = await applyXP(character.id, quest.xpReward, today, tx);
-    return { levelResult, streak, multiplier };
+    const streakResult = await updateStreak(character.id, today, tx);
+    let streakFinal = streakResult.streak;
+
+    // Quest di Ritorno: riaccende la streak (minimo 3) e dà l'XP bonus di recupero
+    if (quest.isRecovery && streakFinal < 3) {
+      streakFinal = 3;
+      await tx.character.update({
+        where: { id: character.id },
+        data: { streak: 3, bestStreak: { set: Math.max(3, character.bestStreak) } },
+      });
+    }
+
+    const bonusXp = quest.isRecovery ? quest.recoveryBonusXp : 0;
+    const levelResult = await applyXP(character.id, quest.xpReward + bonusXp, today, tx);
+    return { levelResult, streak: streakFinal, multiplier: streakResult.multiplier };
   });
 
   if ('alreadyDone' in outcome) {
