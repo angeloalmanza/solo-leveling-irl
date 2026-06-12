@@ -63,6 +63,7 @@ interface NutritionState {
   photoParseFood: (base64: string) => Promise<{ food: Food; grams: number }[]>;
   addMealItem: (mealType: MealLog['mealType'], foodId: string, quantity: number) => Promise<void>;
   removeMealItem: (mealId: string, itemId: string) => Promise<void>;
+  updateMealItem: (mealId: string, itemId: string, quantity: number) => Promise<void>;
   clearSearch: () => void;
   fetchSavedMeals: () => Promise<void>;
   saveMeal: (mealLogId: string, name: string) => Promise<void>;
@@ -122,6 +123,11 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
 
   removeMealItem: async (mealId, itemId) => {
     await api.delete(`/nutrition/meals/${mealId}/items/${itemId}`);
+    await get().fetchToday();
+  },
+
+  updateMealItem: async (mealId, itemId, quantity) => {
+    await api.patch(`/nutrition/meals/${mealId}/items/${itemId}`, { quantity });
     await get().fetchToday();
   },
 

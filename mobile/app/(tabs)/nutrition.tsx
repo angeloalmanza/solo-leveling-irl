@@ -11,8 +11,31 @@ import { MacroBar } from '../../components/MacroBar';
 import { Colors } from '../../constants/theme';
 
 export default function NutritionScreen() {
-  const { today, loading, fetchToday, removeMealItem, photoParseFood, addMealItem, updateGoals, resetGoals } = useNutritionStore();
+  const { today, loading, fetchToday, removeMealItem, updateMealItem, photoParseFood, addMealItem, updateGoals, resetGoals } = useNutritionStore();
   const [photoLoading, setPhotoLoading] = useState<MealLog['mealType'] | null>(null);
+  const [editItem, setEditItem] = useState<{ mealId: string; itemId: string; name: string } | null>(null);
+  const [editQty, setEditQty] = useState('');
+  const [savingQty, setSavingQty] = useState(false);
+
+  function openEditItem(mealId: string, itemId: string, name: string, qty: number) {
+    setEditItem({ mealId, itemId, name });
+    setEditQty(String(Math.round(qty)));
+  }
+
+  async function handleSaveQty() {
+    if (!editItem) return;
+    const q = parseFloat(editQty.replace(',', '.'));
+    if (isNaN(q) || q <= 0) { Alert.alert('Errore', 'Inserisci una quantità valida'); return; }
+    setSavingQty(true);
+    try {
+      await updateMealItem(editItem.mealId, editItem.itemId, q);
+      setEditItem(null);
+    } catch {
+      Alert.alert('Errore', 'Impossibile aggiornare la quantità');
+    } finally {
+      setSavingQty(false);
+    }
+  }
   const [showGoalsModal, setShowGoalsModal] = useState(false);
   const [goalCalories, setGoalCalories] = useState('');
   const [goalProtein, setGoalProtein] = useState('');
@@ -154,12 +177,16 @@ export default function NutritionScreen() {
 
             {meal?.items.map((item) => (
               <View key={item.id} style={styles.foodItem}>
-                <View style={styles.foodInfo}>
-                  <Text style={styles.foodName} numberOfLines={1}>{item.food.name}</Text>
+                <TouchableOpacity
+                  style={styles.foodInfo}
+                  onPress={() => openEditItem(meal.id, item.id, item.food.name, item.quantity)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.foodName} numberOfLines={1}>{item.food.name}  ✎</Text>
                   <Text style={styles.foodDetail}>
                     {item.quantity}g · {Math.round(item.itemCalories)} kcal · P {Math.round(item.food.protein * item.quantity / 100)}g
                   </Text>
-                </View>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.removeBtn}
                   onPress={() => removeMealItem(meal.id, item.id)}
@@ -216,6 +243,35 @@ export default function NutritionScreen() {
               <Text style={styles.resetGoalsBtnText}>Reimposta automatico (BMR/TDEE)</Text>
             </TouchableOpacity>
           )}
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+
+    {/* Modal modifica quantità alimento */}
+    <Modal visible={!!editItem} animationType="slide" transparent onRequestClose={() => setEditItem(null)}>
+      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>[ MODIFICA QUANTITÀ ]</Text>
+            <TouchableOpacity onPress={() => setEditItem(null)}>
+              <Text style={styles.modalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.editItemName}>{editItem?.name}</Text>
+          <View style={styles.goalRow}>
+            <Text style={styles.goalLabel}>Grammi</Text>
+            <TextInput
+              style={styles.goalInput}
+              value={editQty}
+              onChangeText={setEditQty}
+              keyboardType="decimal-pad"
+              selectTextOnFocus
+              autoFocus
+            />
+          </View>
+          <TouchableOpacity style={styles.saveGoalsBtn} onPress={handleSaveQty} disabled={savingQty}>
+            {savingQty ? <ActivityIndicator color={Colors.background} /> : <Text style={styles.saveGoalsBtnText}>SALVA</Text>}
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -280,6 +336,7 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { color: Colors.accent, fontSize: 10, letterSpacing: 3 },
   modalClose: { color: Colors.textMuted, fontSize: 18 },
+  editItemName: { color: Colors.text, fontSize: 16, fontWeight: '700', marginBottom: 16 },
   goalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   goalLabel: { color: Colors.textSecondary, fontSize: 13 },
   goalInput: { backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, color: Colors.text, fontSize: 16, fontWeight: '700', width: 100, textAlign: 'right' },

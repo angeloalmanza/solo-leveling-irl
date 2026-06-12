@@ -181,6 +181,29 @@ router.post('/meals/:id/items', requireAuth, asyncHandler(async (req, res: Respo
   res.status(201).json(item);
 }));
 
+router.patch('/meals/:mealId/items/:itemId', requireAuth, asyncHandler(async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const schema = z.object({ quantity: z.number().positive().max(5000) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+
+  const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const meal = await prisma.mealLog.findFirst({ where: { id: req.params.mealId, characterId: character.id } });
+  if (!meal) { res.status(404).json({ error: 'Meal not found' }); return; }
+
+  const updated = await prisma.mealItem.updateMany({
+    where: { id: req.params.itemId, mealLogId: meal.id },
+    data: { quantity: parsed.data.quantity },
+  });
+  if (updated.count !== 1) { res.status(404).json({ error: 'Item not found' }); return; }
+
+  const item = await prisma.mealItem.findUniqueOrThrow({
+    where: { id: req.params.itemId },
+    include: { food: true },
+  });
+  res.json(item);
+}));
+
 router.delete('/meals/:mealId/items/:itemId', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
