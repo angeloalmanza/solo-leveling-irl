@@ -39,6 +39,7 @@ model UserProfile {
   sex           Sex
   activityLevel ActivityLevel
   timezone      String   @default("Europe/Rome")
+  goals         String[] @default([])
   updatedAt     DateTime @updatedAt
 }
 
@@ -104,8 +105,17 @@ model DailyQuest {
   date            DateTime       @db.Date
   completed       Boolean        @default(false)
   completedAt     DateTime?
+  feedback        QuestFeedback?
+  isRecovery      Boolean        @default(false)
+  recoveryBonusXp Int            @default(0)
 
   @@index([characterId, date])
+}
+
+enum QuestFeedback {
+  easy
+  ok
+  hard
 }
 
 model Food {
