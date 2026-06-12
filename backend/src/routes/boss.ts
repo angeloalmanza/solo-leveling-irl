@@ -5,6 +5,7 @@ import { generateWeeklyBoss } from '../services/aiService';
 import { applyXP, applyStats, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { HttpError } from '../middleware/errorHandler';
 import { getTimezone, weekStartFor, todayFor } from '../lib/dates';
 
 const router = Router();
@@ -73,18 +74,21 @@ router.post('/weekly/tasks/:taskId/complete', requireAuth, asyncHandler(async (r
     return res.status(400).json({ error: 'Boss già sconfitto' });
   }
 
-  const updated = await prisma.weeklyBossTask.update({
-    where: { id: task.id },
+  // Guard condizionale sullo stato corrente: evita doppi toggle concorrenti
+  const toggled = await prisma.weeklyBossTask.updateMany({
+    where: { id: task.id, completed: task.completed },
     data: {
       completed: !task.completed,
       completedAt: !task.completed ? new Date() : null,
     },
   });
+  if (toggled.count !== 1) throw new HttpError(409, 'Task già aggiornato, riprova');
 
   const boss = await prisma.weeklyBoss.findUniqueOrThrow({
     where: { id: task.bossId },
     include: { tasks: true },
   });
+  const updated = boss.tasks.find((t) => t.id === task.id);
 
   res.json({ task: updated, boss });
 }));
@@ -103,25 +107,32 @@ router.post('/weekly/defeat', requireAuth, asyncHandler(async (req, res: Respons
     include: { tasks: true },
   });
 
-  if (!boss) return res.status(404).json({ error: 'Nessun boss questa settimana' });
-  if (boss.defeatedAt) return res.status(400).json({ error: 'Boss già sconfitto' });
+  if (!boss) throw new HttpError(404, 'Nessun boss questa settimana');
+  if (boss.defeatedAt) throw new HttpError(400, 'Boss già sconfitto');
+  if (!boss.tasks.every((t) => t.completed)) {
+    throw new HttpError(400, 'Non tutti i task sono completati');
+  }
 
-  const allDone = boss.tasks.every((t) => t.completed);
-  if (!allDone) return res.status(400).json({ error: 'Non tutti i task sono completati' });
+  const outcome = await prisma.$transaction(async (tx) => {
+    // Guard atomico: solo la prima richiesta concorrente passa
+    const upd = await tx.weeklyBoss.updateMany({
+      where: { id: boss.id, defeatedAt: null },
+      data: { defeatedAt: new Date() },
+    });
+    if (upd.count !== 1) return { alreadyDefeated: true as const };
 
-  await prisma.weeklyBoss.update({
-    where: { id: boss.id },
-    data: { defeatedAt: new Date() },
+    await applyStats(char.id, boss.statRewards as Record<string, number>, tx);
+    const levelResult = await applyXP(char.id, boss.xpReward, todayFor(tz), tx);
+    return { levelResult };
   });
 
-  const levelResult = await applyXP(char.id, boss.xpReward, todayFor(tz));
-  await applyStats(char.id, boss.statRewards as Record<string, number>);
-  const newlyUnlocked = await runUnlockCheck(char.id);
+  if ('alreadyDefeated' in outcome) throw new HttpError(400, 'Boss già sconfitto');
 
+  const newlyUnlocked = await runUnlockCheck(char.id);
   const updatedChar = await prisma.character.findUniqueOrThrow({ where: { id: char.id } });
 
   res.json({
-    ...levelResult,
+    ...outcome.levelResult,
     newlyUnlocked,
     character: { ...updatedChar, activeTitle: getDynamicTitle(updatedChar) },
   });
