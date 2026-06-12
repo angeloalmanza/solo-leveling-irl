@@ -1,4 +1,119 @@
-import { groqChat } from '../lib/groq';
+import { z, ZodSchema } from 'zod';
+import { groqChat, groqVision, GroqChatOpts } from '../lib/groq';
+import { logger } from '../lib/logger';
+
+type Message = { role: 'system' | 'user' | 'assistant'; content: string };
+
+/** Estrae il primo blocco JSON ({...} o [...]) dal testo, come rete di sicurezza. */
+function extractJson(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    const match = content.match(/[[{][\s\S]*[\]}]/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error('No JSON found in AI response');
+  }
+}
+
+/**
+ * Chiama Groq aspettandosi JSON, lo estrae e lo valida con uno schema Zod.
+ * Su parse/validazione fallita ritenta una volta (oltre al retry HTTP interno).
+ */
+async function groqJson<T>(messages: Message[], schema: ZodSchema<T>, opts?: GroqChatOpts): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const content = await groqChat(messages, opts);
+    try {
+      return schema.parse(extractJson(content));
+    } catch (err) {
+      lastErr = err;
+      logger.warn({ err, attempt }, 'AI output parse/validation failed');
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('AI output invalid');
+}
+
+// ── Schemi Zod: validano la FORMA (abilitando il retry); la normalizzazione
+//    (slice/clamp/default) resta nel codice per chiarezza e tipi puliti. ──────
+const looseStr = z.coerce.string().optional();
+const looseNum = z.coerce.number().optional();
+const statRecord = z.record(z.coerce.number()).optional();
+
+const AIQuestSchema = z.object({
+  title: looseStr,
+  description: looseStr,
+  category: looseStr,
+  xpReward: looseNum,
+  statRewards: statRecord,
+  difficulty: looseNum,
+});
+type RawQuest = z.infer<typeof AIQuestSchema>;
+
+const ParsedFoodSchema = z.object({
+  name: looseStr,
+  grams: looseNum,
+  caloriesPer100g: looseNum,
+  proteinPer100g: looseNum,
+  carbsPer100g: looseNum,
+  fatPer100g: looseNum,
+  fiberPer100g: looseNum,
+});
+
+const QuestsResponseSchema = z.object({ quests: z.array(AIQuestSchema).optional() });
+
+const AISkillRawSchema = z.object({
+  name: looseStr,
+  description: looseStr,
+  type: looseStr,
+  unlockLevel: looseNum,
+  statBonus: statRecord,
+  parentSkillName: z.union([z.string(), z.null()]).optional(),
+});
+const SkillsResponseSchema = z.object({ skills: z.array(AISkillRawSchema).optional() });
+
+const AIBossTaskSchema = z.object({ title: looseStr, description: looseStr });
+const AIWeeklyBossSchema = z.object({
+  name: looseStr,
+  description: looseStr,
+  lore: looseStr,
+  statRewards: statRecord,
+  difficulty: looseNum,
+  tasks: z.array(AIBossTaskSchema).optional(),
+});
+
+const clamp = (n: number | undefined, min: number, max: number, fallback: number) =>
+  Math.min(Math.max(Math.round(Number(n) || fallback), min), max);
+
+const normStats = (rec: Record<string, number> | undefined): Record<string, number> => {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(rec ?? {})) {
+    if (['str', 'agi', 'int', 'end', 'vit'].includes(k)) out[k] = Math.round(Number(v) || 0);
+  }
+  return out;
+};
+
+function normalizeQuest(q: RawQuest): AIQuest {
+  return {
+    title: String(q.title ?? '').slice(0, 100),
+    description: String(q.description ?? '').slice(0, 255),
+    category: q.category === 'fitness' ? 'fitness' : 'mente',
+    xpReward: clamp(q.xpReward, 10, 300, 25),
+    statRewards: normStats(q.statRewards),
+    difficulty: clamp(q.difficulty, 1, 3, 1),
+  };
+}
+
+function normalizeFood(f: z.infer<typeof ParsedFoodSchema>): ParsedFood {
+  return {
+    name: String(f.name ?? 'Alimento').slice(0, 100),
+    grams: Math.max(1, Math.round(Number(f.grams) || 100)),
+    caloriesPer100g: Math.max(0, Number(f.caloriesPer100g) || 0),
+    proteinPer100g: Math.max(0, Number(f.proteinPer100g) || 0),
+    carbsPer100g: Math.max(0, Number(f.carbsPer100g) || 0),
+    fatPer100g: Math.max(0, Number(f.fatPer100g) || 0),
+    fiberPer100g: Math.max(0, Number(f.fiberPer100g) || 0),
+  };
+}
 
 export interface ParsedFood {
   name: string;
@@ -62,66 +177,38 @@ Scrivi 4 paragrafi in stile Solo Leveling:
 
 IMPORTANTE: scrivi solo testo, niente simboli speciali, niente parentesi, niente variabili.`,
     },
-  ]);
+  ], { json: false });
 
   return content;
 }
 
 export async function analyzeMealPhoto(base64Image: string): Promise<ParsedFood[]> {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) throw new Error('GROQ_API_KEY not set');
-
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-      messages: [
+  const content = await groqVision('meta-llama/llama-4-scout-17b-16e-instruct', [
+    {
+      role: 'system',
+      content: 'Sei un nutrizionista esperto. Analizza le immagini di pasti e restituisci SOLO un array JSON valido, senza testo aggiuntivo.',
+    },
+    {
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
         {
-          role: 'system',
-          content: 'Sei un nutrizionista esperto. Analizza le immagini di pasti e restituisci SOLO un array JSON valido, senza testo aggiuntivo.',
-        },
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } },
-            {
-              type: 'text',
-              text: `Analizza il pasto nell'immagine. Per ogni alimento riconoscibile stima i valori nutrizionali PER 100g e i grammi presenti nel piatto.
+          type: 'text',
+          text: `Analizza il pasto nell'immagine. Per ogni alimento riconoscibile stima i valori nutrizionali PER 100g e i grammi presenti nel piatto.
 
 Rispondi SOLO con questo array JSON (nessun testo prima o dopo):
 [{"name":"nome in italiano","grams":100,"caloriesPer100g":0,"proteinPer100g":0,"carbsPer100g":0,"fatPer100g":0,"fiberPer100g":0}]`,
-            },
-          ],
         },
       ],
-      max_tokens: 1024,
-    }),
-    signal: AbortSignal.timeout(30000),
-  });
+    },
+  ]);
 
-  if (!res.ok) throw new Error(`Groq vision ${res.status}: ${await res.text()}`);
-
-  const json = await res.json() as { choices: { message: { content: string } }[] };
-  const content = json.choices[0].message.content ?? '[]';
-
-  // estrai il JSON anche se il modello aggiunge testo intorno
-  const match = content.match(/\[[\s\S]*\]/);
-  const raw = JSON.parse(match ? match[0] : content) as Partial<ParsedFood>[];
-
-  return raw.map((item) => ({
-    name: String(item.name ?? 'Alimento').slice(0, 100),
-    grams: Math.max(1, Math.round(Number(item.grams) || 100)),
-    caloriesPer100g: Math.max(0, Number(item.caloriesPer100g) || 0),
-    proteinPer100g: Math.max(0, Number(item.proteinPer100g) || 0),
-    carbsPer100g: Math.max(0, Number(item.carbsPer100g) || 0),
-    fatPer100g: Math.max(0, Number(item.fatPer100g) || 0),
-    fiberPer100g: Math.max(0, Number(item.fiberPer100g) || 0),
-  }));
+  const raw = z.array(ParsedFoodSchema).parse(extractJson(content));
+  return raw.map(normalizeFood);
 }
 
 export async function parseFoodWithAI(description: string): Promise<ParsedFood> {
-  const content = await groqChat([
+  const raw = await groqJson([
     {
       role: 'system',
       content:
@@ -150,18 +237,9 @@ Rispondi con questo JSON esatto (solo JSON, nessun testo fuori):
   "fiberPer100g": numero
 }`,
     },
-  ]);
+  ], ParsedFoodSchema);
 
-  const raw = JSON.parse(content);
-  return {
-    name: String(raw.name ?? 'Alimento').slice(0, 100),
-    grams: Math.max(1, Math.round(Number(raw.grams) || 100)),
-    caloriesPer100g: Math.max(0, Number(raw.caloriesPer100g) || 0),
-    proteinPer100g: Math.max(0, Number(raw.proteinPer100g) || 0),
-    carbsPer100g: Math.max(0, Number(raw.carbsPer100g) || 0),
-    fatPer100g: Math.max(0, Number(raw.fatPer100g) || 0),
-    fiberPer100g: Math.max(0, Number(raw.fiberPer100g) || 0),
-  };
+  return normalizeFood(raw);
 }
 
 export interface AIBossTask {
@@ -200,7 +278,7 @@ export async function generateSkillTree(character: {
   const dominant = Object.entries({ str: character.str, agi: character.agi, int: character.int, end: character.end, vit: character.vit })
     .sort(([, a], [, b]) => b - a)[0][0];
 
-  const content = await groqChat([
+  const raw = await groqJson([
     {
       role: 'system',
       content: 'Sei il Sistema di Solo Leveling. Generi alberi di abilità per Hunter. Rispondi SOLO con JSON valido.',
@@ -227,9 +305,8 @@ Rispondi con JSON:
   ]
 }`,
     },
-  ]);
+  ], SkillsResponseSchema);
 
-  const raw = JSON.parse(content) as { skills: AISkill[] };
   return (raw.skills ?? []).slice(0, 15).map((s) => ({
     name: String(s.name ?? '').slice(0, 60),
     description: String(s.description ?? '').slice(0, 120),
@@ -252,7 +329,7 @@ export async function generateWeeklyBoss(character: {
   const baseQuestXp = Math.floor(25 + character.level * 1.5);
   const xpReward = Math.round(baseQuestXp * 3);
 
-  const content = await groqChat([
+  const raw = await groqJson([
     {
       role: 'system',
       content:
@@ -290,18 +367,17 @@ Rispondi con JSON:
   ]
 }`,
     },
-  ]);
+  ], AIWeeklyBossSchema);
 
-  const raw = JSON.parse(content) as AIWeeklyBoss;
-
+  const stats = normStats(raw.statRewards);
   return {
     name: String(raw.name ?? 'Shadow Monarch').slice(0, 100),
     description: String(raw.description ?? '').slice(0, 255),
     lore: String(raw.lore ?? '').slice(0, 500),
     xpReward,
-    statRewards: typeof raw.statRewards === 'object' && raw.statRewards !== null ? raw.statRewards : { str: 2, agi: 2, int: 2 },
-    difficulty: Math.min(Math.max(Math.round(Number(raw.difficulty) || 3), 1), 5),
-    tasks: (Array.isArray(raw.tasks) ? raw.tasks.slice(0, 3) : []).map((t) => ({
+    statRewards: Object.keys(stats).length > 0 ? stats : { str: 2, agi: 2, int: 2 },
+    difficulty: clamp(raw.difficulty, 1, 5, 3),
+    tasks: (raw.tasks ?? []).slice(0, 3).map((t) => ({
       title: String(t.title ?? '').slice(0, 100),
       description: String(t.description ?? '').slice(0, 255),
     })),
@@ -321,7 +397,7 @@ export async function generateDailyQuests(character: {
   const xpMin = Math.floor(25 + level * 1.5);
   const xpMax = Math.floor(xpMin * 2.2);
 
-  const content = await groqChat([
+  const raw = await groqJson([
     {
       role: 'system',
       content:
@@ -395,19 +471,9 @@ Rispondi con JSON:
   ]
 }`,
     },
-  ]);
+  ], QuestsResponseSchema);
 
-  const raw = JSON.parse(content) as { quests: AIQuest[] };
-  const quests = (raw.quests ?? []).slice(0, 4);
-
-  return quests.map((q) => ({
-    title: String(q.title ?? '').slice(0, 100),
-    description: String(q.description ?? '').slice(0, 255),
-    category: q.category === 'fitness' ? 'fitness' : 'mente',
-    xpReward: Math.min(Math.max(Math.round(Number(q.xpReward) || xpMin), 10), 300),
-    statRewards: typeof q.statRewards === 'object' && q.statRewards !== null ? q.statRewards : {},
-    difficulty: Math.min(Math.max(Math.round(Number(q.difficulty) || 1), 1), 3),
-  }));
+  return (raw.quests ?? []).slice(0, 4).map(normalizeQuest);
 }
 
 /** Genera UNA singola quest (per il reroll), evitando i titoli già presenti. */
@@ -421,7 +487,7 @@ export async function generateSingleQuest(
   const xpMax = Math.floor(xpMin * 2.2);
   const exclude = excludeTitles.length > 0 ? excludeTitles.map((t) => `"${t}"`).join(', ') : 'nessuna';
 
-  const content = await groqChat([
+  const q = await groqJson([
     {
       role: 'system',
       content:
@@ -444,15 +510,8 @@ REGOLE:
 Rispondi con JSON:
 { "title": "string", "description": "string", "category": "${category}", "xpReward": number, "statRewards": {"str": 1}, "difficulty": 1 }`,
     },
-  ]);
+  ], AIQuestSchema);
 
-  const q = JSON.parse(content) as AIQuest;
-  return {
-    title: String(q.title ?? '').slice(0, 100),
-    description: String(q.description ?? '').slice(0, 255),
-    category: category,
-    xpReward: Math.min(Math.max(Math.round(Number(q.xpReward) || xpMin), 10), 300),
-    statRewards: typeof q.statRewards === 'object' && q.statRewards !== null ? q.statRewards : {},
-    difficulty: Math.min(Math.max(Math.round(Number(q.difficulty) || 1), 1), 3),
-  };
+  // Normalizza e forza la categoria richiesta dal reroll
+  return { ...normalizeQuest(q), category };
 }
