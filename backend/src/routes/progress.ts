@@ -4,7 +4,8 @@ import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { generateWeeklySummary } from '../services/aiService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { aiLimiter } from '../middleware/rateLimit';
-import { getTimezone, weekStartFor } from '../lib/dates';
+import { weekStartFor } from '../lib/dates';
+import { getUserContext } from '../lib/userContext';
 
 const router = Router();
 
@@ -70,7 +71,7 @@ router.get('/weekly-summary', requireAuth, aiLimiter, asyncHandler(async (req, r
   const userId = (req as AuthRequest).userId;
   const char = await prisma.character.findUniqueOrThrow({ where: { userId } });
 
-  const weekStart = weekStartFor(await getTimezone(userId));
+  const weekStart = weekStartFor((await getUserContext(userId)).tz);
 
   // Cache persistente: una sintesi per (personaggio, settimana)
   const existing = await prisma.weeklySummary.findUnique({

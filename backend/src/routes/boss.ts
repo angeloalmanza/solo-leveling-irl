@@ -6,7 +6,8 @@ import { applyXP, applyStats, getDynamicTitle } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { HttpError } from '../middleware/errorHandler';
-import { getTimezone, weekStartFor, todayFor } from '../lib/dates';
+import { weekStartFor, todayFor } from '../lib/dates';
+import { getUserContext } from '../lib/userContext';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/weekly', requireAuth, asyncHandler(async (req, res: Response) => {
     where: { userId },
   });
 
-  const weekStart = weekStartFor(await getTimezone(userId));
+  const weekStart = weekStartFor((await getUserContext(userId)).tz);
 
   let boss = await prisma.weeklyBoss.findUnique({
     where: { characterId_weekStart: { characterId: char.id, weekStart } },
@@ -99,7 +100,7 @@ router.post('/weekly/defeat', requireAuth, asyncHandler(async (req, res: Respons
     where: { userId },
   });
 
-  const tz = await getTimezone(userId);
+  const tz = (await getUserContext(userId)).tz;
   const weekStart = weekStartFor(tz);
 
   const boss = await prisma.weeklyBoss.findUnique({

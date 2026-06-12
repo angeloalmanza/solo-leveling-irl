@@ -1,5 +1,3 @@
-import { prisma } from './prisma';
-
 export const DEFAULT_TZ = 'Europe/Rome';
 
 /** "YYYY-MM-DD" del giorno corrente nel fuso orario dato. */
@@ -39,13 +37,4 @@ export function daysBetween(from: Date, to: Date): number {
   const b = new Date(to);
   b.setUTCHours(0, 0, 0, 0);
   return Math.floor((b.getTime() - a.getTime()) / msPerDay);
-}
-
-/** Carica il fuso orario dell'utente (default Europe/Rome). */
-export async function getTimezone(userId: string): Promise<string> {
-  const profile = await prisma.userProfile.findUnique({
-    where: { userId },
-    select: { timezone: true },
-  });
-  return profile?.timezone ?? DEFAULT_TZ;
 }

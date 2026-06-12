@@ -9,7 +9,8 @@ import { runUnlockCheck } from '../services/unlockService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { logger } from '../lib/logger';
 import { aiLimiter } from '../middleware/rateLimit';
-import { getTimezone, todayFor } from '../lib/dates';
+import { todayFor } from '../lib/dates';
+import { getUserContext } from '../lib/userContext';
 
 const router = Router();
 
@@ -47,7 +48,7 @@ router.get('/goals', requireAuth, asyncHandler(async (req, res: Response) => {
 
 router.get('/today', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
-  const todayDate = todayFor(await getTimezone(userId));
+  const todayDate = todayFor((await getUserContext(userId)).tz);
   const character = await prisma.character.findUniqueOrThrow({
     where: { userId },
     include: {
@@ -148,7 +149,7 @@ router.post('/meals', requireAuth, asyncHandler(async (req, res: Response) => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
-  const date = todayFor(await getTimezone(userId));
+  const date = todayFor((await getUserContext(userId)).tz);
 
   // upsert sul vincolo unico: niente più doppioni da richieste concorrenti
   const meal = await prisma.mealLog.upsert({
@@ -176,7 +177,7 @@ router.post('/meals/:id/items', requireAuth, asyncHandler(async (req, res: Respo
     include: { food: true },
   });
 
-  await checkAndGrantVitReward(character.id, todayFor(await getTimezone(userId)));
+  await checkAndGrantVitReward(character.id, todayFor((await getUserContext(userId)).tz));
 
   res.status(201).json(item);
 }));
@@ -349,7 +350,7 @@ router.post('/saved-meals/:id/use', requireAuth, asyncHandler(async (req, res: R
   const saved = await prisma.savedMeal.findFirst({ where: { id: req.params.id, characterId: char.id } });
   if (!saved) { res.status(404).json({ error: 'Pasto salvato non trovato' }); return; }
 
-  const todayDate = todayFor(await getTimezone(userId));
+  const todayDate = todayFor((await getUserContext(userId)).tz);
   const mealLog = await prisma.mealLog.upsert({
     where: { characterId_date_mealType: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType } },
     create: { characterId: char.id, date: todayDate, mealType: parsed.data.mealType },
