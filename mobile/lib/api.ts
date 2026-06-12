@@ -41,7 +41,7 @@ async function doRefresh(): Promise<string> {
   return data.accessToken as string;
 }
 
-async function forceLogout() {
+export async function forceLogout() {
   await SecureStore.deleteItemAsync('accessToken');
   await SecureStore.deleteItemAsync('refreshToken');
   try {

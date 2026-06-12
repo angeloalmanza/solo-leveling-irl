@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from '../lib/api';
+import { api, forceLogout } from '../lib/api';
 // Formule di gioco dalla fonte condivisa (allineate al backend)
 export { xpForNextLevel, streakMultiplier } from '@solo/shared';
 
@@ -48,6 +48,12 @@ export const useCharacterStore = create<CharacterState>((set) => ({
       const { data } = await api.get<Character & { penalty?: PenaltyInfo | null }>('/character/me');
       const { penalty, ...character } = data;
       set({ character, lastPenalty: penalty ?? null });
+    } catch (err: any) {
+      // Account inesistente (es. cancellato lato server) → sessione non valida
+      if (err?.response?.status === 404) {
+        await forceLogout();
+      }
+      throw err;
     } finally {
       set({ loading: false });
     }
