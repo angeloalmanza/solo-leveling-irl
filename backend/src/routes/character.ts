@@ -4,7 +4,8 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
 import { applyInactivityPenalty, getDynamicTitle, saveSnapshotIfNeeded } from '../services/levelService';
 import { asyncHandler } from '../utils/asyncHandler';
-import { getTimezone, todayFor } from '../lib/dates';
+import { todayFor } from '../lib/dates';
+import { getUserContext, invalidateUserContext } from '../lib/userContext';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.get('/me', requireAuth, asyncHandler(async (req, res: Response) => {
     return;
   }
 
-  const tz = await getTimezone(userId);
+  const { tz } = await getUserContext(userId);
   const penalty = await applyInactivityPenalty(character.id, tz);
 
   if (penalty) {
@@ -51,6 +52,30 @@ router.patch('/me', requireAuth, asyncHandler(async (req, res: Response) => {
     data: parsed.data,
   });
   res.json(character);
+}));
+
+const GoalsSchema = z.object({ goals: z.array(z.string().trim().min(1).max(100)).max(3) });
+
+router.get('/goals', requireAuth, asyncHandler(async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const profile = await prisma.userProfile.findUniqueOrThrow({ where: { userId }, select: { goals: true } });
+  res.json(profile);
+}));
+
+router.patch('/goals', requireAuth, asyncHandler(async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const parsed = GoalsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const profile = await prisma.userProfile.update({
+    where: { userId },
+    data: { goals: parsed.data.goals },
+    select: { goals: true },
+  });
+  invalidateUserContext(userId);
+  res.json(profile);
 }));
 
 export default router;

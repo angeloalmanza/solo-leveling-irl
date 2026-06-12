@@ -21,6 +21,7 @@ const RegisterSchema = z.object({
   sex: z.enum(['male', 'female']),
   activityLevel: z.enum(['sedentary', 'light', 'moderate', 'active', 'very_active']),
   timezone: z.string().min(1).max(64).optional(),
+  goals: z.array(z.string().trim().min(1).max(100)).max(3).optional(),
 });
 
 const LoginSchema = z.object({
@@ -53,7 +54,7 @@ router.post('/register', authLimiter, asyncHandler(async (req: Request, res: Res
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { email, password, characterName, weight, height, age, sex, activityLevel, timezone } = parsed.data;
+  const { email, password, characterName, weight, height, age, sex, activityLevel, timezone, goals: personalGoals } = parsed.data;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -62,7 +63,7 @@ router.post('/register', authLimiter, asyncHandler(async (req: Request, res: Res
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const goals = calcNutritionGoals(weight, height, age, sex as Sex, activityLevel as ActivityLevel);
+  const nutritionGoals = calcNutritionGoals(weight, height, age, sex as Sex, activityLevel as ActivityLevel);
 
   const user = await prisma.user.create({
     data: {
@@ -76,12 +77,13 @@ router.post('/register', authLimiter, asyncHandler(async (req: Request, res: Res
           sex: sex as Sex,
           activityLevel: activityLevel as ActivityLevel,
           ...(timezone ? { timezone } : {}),
+          goals: personalGoals ?? [],
         },
       },
       character: {
         create: {
           name: characterName,
-          nutritionGoal: { create: goals },
+          nutritionGoal: { create: nutritionGoals },
         },
       },
     },

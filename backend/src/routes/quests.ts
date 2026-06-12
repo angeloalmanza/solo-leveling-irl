@@ -9,7 +9,8 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { HttpError } from '../middleware/errorHandler';
 import { logger } from '../lib/logger';
 import { aiLimiter } from '../middleware/rateLimit';
-import { getTimezone, todayFor } from '../lib/dates';
+import { todayFor } from '../lib/dates';
+import { getUserContext } from '../lib/userContext';
 
 const router = Router();
 
@@ -78,7 +79,8 @@ async function fallbackSeeds(fitnessNeeded: number, menteNeeded: number): Promis
 router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
-  const today = todayFor(await getTimezone(userId));
+  const { tz, goals } = await getUserContext(userId);
+  const today = todayFor(tz);
 
   const existing = await prisma.dailyQuest.findMany({
     where: { characterId: character.id, date: today },
@@ -91,7 +93,7 @@ router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
 
   let seeds: QuestSeed[] | null = null;
   try {
-    const ai = await generateDailyQuests(character);
+    const ai = await generateDailyQuests(character, { goals });
     const fitness = ai.filter((q) => q.category === 'fitness').slice(0, 2);
     const mente = ai.filter((q) => q.category === 'mente').slice(0, 2);
     if (fitness.length + mente.length >= 2) {
@@ -112,7 +114,7 @@ router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
 router.post('/daily/refresh', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
-  const today = todayFor(await getTimezone(userId));
+  const today = todayFor((await getUserContext(userId)).tz);
 
   const todayQuests = await prisma.dailyQuest.findMany({
     where: { characterId: character.id, date: today },
@@ -151,7 +153,7 @@ router.post('/daily/refresh', requireAuth, aiLimiter, asyncHandler(async (req, r
 router.post('/daily/:id/reroll', requireAuth, aiLimiter, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
-  const today = todayFor(await getTimezone(userId));
+  const today = todayFor((await getUserContext(userId)).tz);
 
   const quest = await prisma.dailyQuest.findFirst({
     where: { id: req.params.id, characterId: character.id },
@@ -195,7 +197,7 @@ router.post('/daily/:id/reroll', requireAuth, aiLimiter, asyncHandler(async (req
 router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Response) => {
   const userId = (req as AuthRequest).userId;
   const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
-  const today = todayFor(await getTimezone(userId));
+  const today = todayFor((await getUserContext(userId)).tz);
 
   const quest = await prisma.dailyQuest.findFirst({
     where: { id: req.params.id, characterId: character.id },

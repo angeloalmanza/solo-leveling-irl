@@ -20,6 +20,7 @@ export interface RegisterData {
   age: number;
   sex: 'male' | 'female';
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+  goals?: string[];
 }
 
 export const useAuthStore = create<AuthState>((set) => ({

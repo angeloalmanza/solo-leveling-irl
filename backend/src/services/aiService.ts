@@ -384,18 +384,55 @@ Rispondi con JSON:
   };
 }
 
-export async function generateDailyQuests(character: {
-  level: number;
-  rank: string;
-  str: number;
-  agi: number;
-  int: number;
-  end: number;
-  vit: number;
-}): Promise<AIQuest[]> {
+export interface DailyQuestOpts {
+  goals?: string[];
+  difficultyHint?: 'easier' | 'harder' | null;
+  recentQuests?: string[];
+}
+
+export async function generateDailyQuests(
+  character: {
+    level: number;
+    rank: string;
+    str: number;
+    agi: number;
+    int: number;
+    end: number;
+    vit: number;
+  },
+  opts?: DailyQuestOpts
+): Promise<AIQuest[]> {
   const { level, rank, str, agi, int: INT, end, vit } = character;
   const xpMin = Math.floor(25 + level * 1.5);
   const xpMax = Math.floor(xpMin * 2.2);
+
+  const goalsSection = opts?.goals?.length
+    ? `\nOBIETTIVI PERSONALI DELL'HUNTER (dichiarati da lui):
+${opts.goals.map((g, i) => `${i + 1}. ${g}`).join('\n')}
+
+REGOLA OBIETTIVI: almeno 1 missione fitness e 1 missione mente devono essere
+un passo CONCRETO e MISURABILE verso uno di questi obiettivi. Le altre seguono
+le regole standard. Non citare l'obiettivo testualmente: traducilo in azione.\n`
+    : '';
+
+  const difficultySection =
+    opts?.difficultyHint === 'easier'
+      ? `\nCALIBRAZIONE: nell'ultima settimana l'Hunter ha trovato le missioni TROPPO DURE.
+Riduci l'intensità di circa il 20% rispetto allo standard del suo livello. La costanza vale più dell'intensità.\n`
+      : opts?.difficultyHint === 'harder'
+        ? `\nCALIBRAZIONE: nell'ultima settimana l'Hunter ha trovato le missioni TROPPO FACILI.
+Aumenta l'intensità di circa il 20% rispetto allo standard del suo livello.\n`
+        : '';
+
+  const recentSection = opts?.recentQuests?.length
+    ? `\nMISSIONI FITNESS DEI GIORNI SCORSI (non ripeterle):
+${opts.recentQuests.map((t) => `- ${t}`).join('\n')}
+
+REGOLA RECUPERO: l'allenamento reale richiede riposo. Se gli ultimi 6 giorni
+mostrano solo allenamenti intensi (forza/HIIT/cardio), UNA delle due missioni
+fitness di oggi deve essere recupero attivo: stretching, mobilità, camminata,
+yoga, foam rolling. Difficulty 1.\n`
+    : '';
 
   const raw = await groqJson([
     {
@@ -410,7 +447,7 @@ export async function generateDailyQuests(character: {
 Statistiche:
 - Livello ${level} | Rank ${rank}
 - STR ${str} | AGI ${agi} | INT ${INT} | END ${end} | VIT ${vit}
-
+${goalsSection}${difficultySection}${recentSection}
 REGOLE FONDAMENTALI:
 - 2 missioni category "fitness" + 2 missioni category "mente"
 - Titoli in italiano, concisi (max 50 caratteri), stile Solo Leveling epico

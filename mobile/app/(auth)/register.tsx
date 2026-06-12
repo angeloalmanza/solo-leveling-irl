@@ -24,6 +24,7 @@ export default function RegisterScreen() {
   const [age, setAge] = useState('');
   const [sex, setSex] = useState<'male' | 'female'>('male');
   const [activityLevel, setActivityLevel] = useState<RegisterData['activityLevel']>('moderate');
+  const [goals, setGoals] = useState(['', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const register = useAuthStore((s) => s.register);
@@ -49,6 +50,7 @@ export default function RegisterScreen() {
         age: parseInt(age, 10),
         sex,
         activityLevel,
+        goals: goals.map((g) => g.trim()).filter(Boolean).slice(0, 3),
       });
       router.replace('/(tabs)/status');
     } catch (e: any) {
@@ -122,6 +124,20 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             ))}
           </View>
+        </Field>
+
+        <Field label="[ DICHIARA I TUOI OBIETTIVI, HUNTER ] (max 3, opzionale)">
+          {goals.map((g, i) => (
+            <TextInput
+              key={i}
+              style={[styles.input, { marginBottom: 8 }]}
+              value={g}
+              onChangeText={(t) => setGoals((prev) => prev.map((v, j) => (j === i ? t : v)))}
+              placeholder={['es. Correre 5 km senza fermarmi', 'es. Leggere 20 min al giorno', 'es. Imparare il tedesco'][i]}
+              placeholderTextColor={Colors.textMuted}
+              maxLength={100}
+            />
+          ))}
         </Field>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}

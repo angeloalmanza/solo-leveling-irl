@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Switch, ActivityIndicator, Alert, Platform,
+  Switch, ActivityIndicator, Alert, Platform, TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
@@ -9,6 +9,8 @@ import {
   requestPermissions, scheduleDailyReminder, cancelAllReminders,
   getSavedSettings, saveSettings, notificationsAvailable,
 } from '../lib/notifications';
+import { api } from '../lib/api';
+import { useUiStore } from '../stores/uiStore';
 import { Colors } from '../constants/theme';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -20,13 +22,36 @@ export default function SettingsScreen() {
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [goals, setGoals] = useState(['', '', '']);
+  const [savingGoals, setSavingGoals] = useState(false);
 
   useEffect(() => {
     getSavedSettings().then(({ hour: h, minute: m, enabled: e }) => {
       setHour(h); setMinute(m); setEnabled(e);
       setLoading(false);
     });
+    api.get<{ goals: string[] }>('/character/goals')
+      .then(({ data }) => {
+        const g = data.goals ?? [];
+        setGoals([g[0] ?? '', g[1] ?? '', g[2] ?? '']);
+      })
+      .catch(() => { /* nessun obiettivo o offline */ });
   }, []);
+
+  async function handleSaveGoals() {
+    const cleaned = goals.map((g) => g.trim()).filter(Boolean).slice(0, 3);
+    const prev = goals;
+    setSavingGoals(true);
+    try {
+      await api.patch('/character/goals', { goals: cleaned });
+      useUiStore.getState().showToast('Obiettivi aggiornati', 'success');
+    } catch {
+      setGoals(prev); // rollback
+      useUiStore.getState().showToast('Impossibile salvare gli obiettivi', 'error');
+    } finally {
+      setSavingGoals(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -126,6 +151,27 @@ export default function SettingsScreen() {
       <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving}>
         {saving ? <ActivityIndicator color={Colors.background} /> : <Text style={s.saveBtnText}>SALVA</Text>}
       </TouchableOpacity>
+
+      <View style={[s.section, { marginTop: 24 }]}>
+        <Text style={s.sectionLabel}>OBIETTIVI (MAX 3)</Text>
+        <Text style={s.hint}>
+          Le quest giornaliere includeranno passi concreti verso questi obiettivi.
+        </Text>
+        {goals.map((g, i) => (
+          <TextInput
+            key={i}
+            style={s.goalInput}
+            value={g}
+            onChangeText={(t) => setGoals((prev) => prev.map((v, j) => (j === i ? t : v)))}
+            placeholder={`Obiettivo ${i + 1}`}
+            placeholderTextColor={Colors.textMuted}
+            maxLength={100}
+          />
+        ))}
+        <TouchableOpacity style={s.saveBtn} onPress={handleSaveGoals} disabled={savingGoals}>
+          {savingGoals ? <ActivityIndicator color={Colors.background} /> : <Text style={s.saveBtnText}>SALVA OBIETTIVI</Text>}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -156,6 +202,7 @@ const s = StyleSheet.create({
 
   saveBtn: { backgroundColor: Colors.accent, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
   saveBtnText: { color: Colors.background, fontSize: 13, fontWeight: '800', letterSpacing: 3 },
+  goalInput: { backgroundColor: Colors.surfaceElevated, borderWidth: 1, borderColor: Colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 10, color: Colors.text, fontSize: 14, marginTop: 10 },
 
   banner: { backgroundColor: '#1a1000', borderWidth: 1, borderColor: Colors.warning, borderRadius: 8, padding: 12, marginBottom: 20 },
   bannerText: { color: Colors.warning, fontSize: 12, lineHeight: 18 },
