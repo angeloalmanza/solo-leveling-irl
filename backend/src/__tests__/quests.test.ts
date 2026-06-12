@@ -72,6 +72,24 @@ describe('POST /quests/daily/:id/complete', () => {
     expect(await xpOf(token)).toBe(0);
   });
 
+  it('undo bloccato dopo un level-up: 400 e quest ancora completata', async () => {
+    const { token, quests } = await setup();
+    const q = quests[0];
+    const char = await prisma.character.findFirstOrThrow();
+    // Portiamo l'XP a ridosso del level-up: completare farà salire di livello
+    await prisma.character.update({ where: { id: char.id }, data: { xp: 99 } });
+
+    await request(app).post(`/v1/quests/daily/${q.id}/complete`).set('Authorization', `Bearer ${token}`);
+    const afterComplete = await prisma.character.findFirstOrThrow();
+    expect(afterComplete.level).toBe(2); // level-up avvenuto
+
+    const undo = await request(app).post(`/v1/quests/daily/${q.id}/complete`).set('Authorization', `Bearer ${token}`);
+    expect(undo.status).toBe(400);
+
+    const stillCompleted = await prisma.dailyQuest.findUniqueOrThrow({ where: { id: q.id } });
+    expect(stillCompleted.completed).toBe(true); // NON toccata
+  });
+
   it('undo bloccato dopo 10 minuti', async () => {
     const { token, quests } = await setup();
     const q = quests[0];

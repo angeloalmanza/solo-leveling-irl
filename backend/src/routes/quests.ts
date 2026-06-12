@@ -214,16 +214,17 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
     }
 
     const outcome = await prisma.$transaction(async (tx) => {
-      // Anti double-tap: procede solo se è ancora completata
+      // 1. Prima il check: se rimuovere l'XP causerebbe un level-down, blocca
+      //    SENZA toccare la quest (niente da ripristinare, niente finestra di race).
+      const char = await tx.character.findUniqueOrThrow({ where: { id: character.id } });
+      if (char.xp - quest.xpReward < 0) return { blocked: true as const };
+
+      // 2. Poi il guard anti double-tap
       const undo = await tx.dailyQuest.updateMany({
         where: { id: quest.id, characterId: character.id, completed: true },
         data: { completed: false, completedAt: null },
       });
       if (undo.count !== 1) return { noop: true as const };
-
-      const char = await tx.character.findUniqueOrThrow({ where: { id: character.id } });
-      // Se rimuovere l'XP richiederebbe un level-down, l'undo è bloccato
-      if (char.xp - quest.xpReward < 0) return { blocked: true as const };
 
       const negativeStats = Object.fromEntries(Object.entries(statRewards).map(([k, v]) => [k, -v]));
       await applyStats(character.id, negativeStats, tx);
@@ -235,11 +236,6 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
     });
 
     if ('blocked' in outcome) {
-      // ripristina lo stato completato (era stato messo a false nel updateMany)
-      await prisma.dailyQuest.update({
-        where: { id: quest.id },
-        data: { completed: true, completedAt: quest.completedAt },
-      });
       throw new HttpError(400, 'Non puoi annullare: la quest ha già fatto salire di livello');
     }
 
