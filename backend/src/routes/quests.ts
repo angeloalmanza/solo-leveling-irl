@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { DailyQuest, QuestCategory } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
-import { applyXP, applyStats, updateStreak, getDynamicTitle } from '../services/levelService';
+import { applyXP, applyStats, updateStreak, getDynamicTitle, calcStreakMultiplier } from '../services/levelService';
 import { runUnlockCheck } from '../services/unlockService';
 import { generateDailyQuests, generateSingleQuest, AIQuest } from '../services/aiService';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -252,16 +252,19 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
       throw new HttpError(400, 'Troppo tardi per annullare (max 10 minuti)');
     }
 
+    // XP effettivamente assegnato (con moltiplicatore + eventuale bonus)
+    const awarded = quest.xpAwarded || quest.xpReward;
+
     const outcome = await prisma.$transaction(async (tx) => {
       // 1. Prima il check: se rimuovere l'XP causerebbe un level-down, blocca
       //    SENZA toccare la quest (niente da ripristinare, niente finestra di race).
       const char = await tx.character.findUniqueOrThrow({ where: { id: character.id } });
-      if (char.xp - quest.xpReward < 0) return { blocked: true as const };
+      if (char.xp - awarded < 0) return { blocked: true as const };
 
       // 2. Poi il guard anti double-tap
       const undo = await tx.dailyQuest.updateMany({
         where: { id: quest.id, characterId: character.id, completed: true },
-        data: { completed: false, completedAt: null },
+        data: { completed: false, completedAt: null, xpAwarded: 0 },
       });
       if (undo.count !== 1) return { noop: true as const };
 
@@ -269,7 +272,7 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
       await applyStats(character.id, negativeStats, tx);
       await tx.character.update({
         where: { id: character.id },
-        data: { xp: { decrement: quest.xpReward } },
+        data: { xp: { decrement: awarded } },
       });
       return { undone: true as const };
     });
@@ -310,9 +313,15 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
       });
     }
 
+    // Il moltiplicatore di streak premia la costanza sulle quest; il bonus di
+    // recupero NON va moltiplicato.
+    const multiplierFinal = calcStreakMultiplier(streakFinal);
     const bonusXp = quest.isRecovery ? quest.recoveryBonusXp : 0;
-    const levelResult = await applyXP(character.id, quest.xpReward + bonusXp, today, tx);
-    return { levelResult, streak: streakFinal, multiplier: streakResult.multiplier };
+    const totalXp = Math.round(quest.xpReward * multiplierFinal) + bonusXp;
+
+    const levelResult = await applyXP(character.id, totalXp, today, tx);
+    await tx.dailyQuest.update({ where: { id: quest.id }, data: { xpAwarded: totalXp } });
+    return { levelResult, streak: streakFinal, multiplier: multiplierFinal, xpGained: totalXp };
   });
 
   if ('alreadyDone' in outcome) {
@@ -337,6 +346,7 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
     newlyUnlocked,
     streak: outcome.streak,
     multiplier: outcome.multiplier,
+    xpGained: outcome.xpGained,
   });
 }));
 

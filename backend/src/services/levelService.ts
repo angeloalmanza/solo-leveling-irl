@@ -51,8 +51,9 @@ export async function applyXP(characterId: string, baseXp: number, today: Date, 
   const oldLevel = char.level;
   const oldRank = char.rank;
 
-  const multiplier = calcStreakMultiplier(char.streak);
-  const xpGain = Math.round(baseXp * multiplier);
+  // baseXp è l'XP finale già calcolato dal chiamante (incluso l'eventuale
+  // moltiplicatore di streak). Qui lo aggiungiamo grezzo.
+  const xpGain = Math.round(baseXp);
 
   let level = char.level;
   let xp = char.xp + xpGain;

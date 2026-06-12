@@ -107,6 +107,41 @@ describe('POST /quests/daily/:id/complete', () => {
   });
 });
 
+describe('moltiplicatore di streak applicato all’XP', () => {
+  it('streak ≥ 7 → XP = round(reward * 1.1)', async () => {
+    const { token, quests } = await setup();
+    const q = quests[0];
+    const char = await prisma.character.findFirstOrThrow();
+    // Streak alta e ultima quest ieri → updateStreak la porta a 8 (mult 1.1)
+    const yesterday = new Date();
+    yesterday.setUTCHours(0, 0, 0, 0);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    await prisma.character.update({ where: { id: char.id }, data: { streak: 7, lastQuestDate: yesterday } });
+
+    const res = await request(app).post(`/v1/quests/daily/${q.id}/complete`).set('Authorization', `Bearer ${token}`);
+    const expected = Math.round(q.questTemplate.xpReward * 1.1);
+    expect(res.body.xpGained).toBe(expected);
+    expect(await xpOf(token)).toBe(expected);
+  });
+
+  it('undo con moltiplicatore attivo riporta l’XP esattamente a 0', async () => {
+    const { token, quests } = await setup();
+    const q = quests[0];
+    const char = await prisma.character.findFirstOrThrow();
+    const yesterday = new Date();
+    yesterday.setUTCHours(0, 0, 0, 0);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    await prisma.character.update({ where: { id: char.id }, data: { streak: 7, lastQuestDate: yesterday } });
+
+    await request(app).post(`/v1/quests/daily/${q.id}/complete`).set('Authorization', `Bearer ${token}`);
+    expect(await xpOf(token)).toBeGreaterThan(q.questTemplate.xpReward); // moltiplicato
+
+    const undo = await request(app).post(`/v1/quests/daily/${q.id}/complete`).set('Authorization', `Bearer ${token}`);
+    expect(undo.body.undone).toBe(true);
+    expect(await xpOf(token)).toBe(0); // decremento esatto via xpAwarded
+  });
+});
+
 describe('POST /quests/daily/:id/feedback', () => {
   it('feedback su quest NON completata → 400', async () => {
     const { token, quests } = await setup();

@@ -41,6 +41,8 @@ export interface CompleteResult {
   newRank: string;
   newlyUnlocked: { shadows: UnlockItem[]; achievements: UnlockItem[] };
   undone?: boolean;
+  xpGained?: number;
+  multiplier?: number;
 }
 
 interface QuestState {

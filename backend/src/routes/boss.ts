@@ -122,6 +122,7 @@ router.post('/weekly/defeat', requireAuth, asyncHandler(async (req, res: Respons
     if (upd.count !== 1) return { alreadyDefeated: true as const };
 
     await applyStats(char.id, boss.statRewards as Record<string, number>, tx);
+    // Il boss dà una ricompensa settimanale FISSA: nessun moltiplicatore di streak.
     const levelResult = await applyXP(char.id, boss.xpReward, todayFor(tz), tx);
     return { levelResult };
   });

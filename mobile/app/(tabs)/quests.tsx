@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useQuestStore, DailyQuest, CompleteResult } from '../../stores/questStore';
 import { useBossStore, DefeatResult } from '../../stores/bossStore';
+import { useCharacterStore, streakMultiplier } from '../../stores/characterStore';
 import { QuestCard } from '../../components/QuestCard';
 import { LevelUpModal } from '../../components/LevelUpModal';
 import { RankUpModal } from '../../components/RankUpModal';
@@ -20,8 +21,11 @@ const DIFF_STARS = ['', '★', '★★', '★★★', '★★★★', '★★★
 
 export default function QuestsScreen() {
   const { quests, loading, completing, fetch, reroll, complete, sendFeedback } = useQuestStore();
+  const character = useCharacterStore((s) => s.character);
+  const streakMult = streakMultiplier(character?.streak ?? 0);
   const { boss, loading: bossLoading, defeating, fetch: fetchBoss, completeTask, defeat } = useBossStore();
   const [bannerVisible, setBannerVisible] = useState(false);
+  const [bannerXp, setBannerXp] = useState<number | null>(null);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
 
   const [levelUpData, setLevelUpData] = useState<{ oldLevel: number; newLevel: number } | null>(null);
@@ -94,6 +98,7 @@ export default function QuestsScreen() {
     try {
       const result = await complete(questId);
       if (!result.undone) {
+        setBannerXp(result.xpGained ?? null);
         showBanner();
         handleModalResult(result);
       }
@@ -117,7 +122,7 @@ export default function QuestsScreen() {
     <View style={styles.container}>
       {bannerVisible && (
         <Animated.View style={[styles.banner, { opacity: bannerOpacity }]}>
-          <Text style={styles.bannerText}>QUEST COMPLETATA</Text>
+          <Text style={styles.bannerText}>QUEST COMPLETATA{bannerXp != null ? `  +${bannerXp} XP` : ''}</Text>
         </Animated.View>
       )}
 
@@ -125,7 +130,12 @@ export default function QuestsScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={fetch} tintColor={Colors.accent} />}
       >
-        <Text style={styles.systemLabel}>[ DAILY QUESTS ]</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.systemLabel}>[ DAILY QUESTS ]</Text>
+          {streakMult > 1 && (
+            <Text style={styles.multBadge}>🔥 STREAK ×{streakMult.toFixed(2)} XP</Text>
+          )}
+        </View>
         <View style={styles.progressRow}>
           <Text style={styles.progressText}>{completedCount}/{totalCount} completate</Text>
           <View style={styles.progressTrack}>
@@ -344,7 +354,9 @@ const styles = StyleSheet.create({
   },
   bannerText: { color: Colors.background, fontSize: 13, fontWeight: '800', letterSpacing: 4 },
 
-  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4, marginBottom: 14 },
+  systemLabel: { color: Colors.textMuted, fontSize: 10, letterSpacing: 4 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  multBadge: { color: Colors.warning, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
 
   progressRow: { gap: 8, marginBottom: 28 },
   progressText: { color: Colors.textSecondary, fontSize: 12 },

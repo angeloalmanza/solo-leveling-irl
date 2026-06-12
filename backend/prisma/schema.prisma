@@ -108,6 +108,7 @@ model DailyQuest {
   feedback        QuestFeedback?
   isRecovery      Boolean        @default(false)
   recoveryBonusXp Int            @default(0)
+  xpAwarded       Int            @default(0)
 
   @@index([characterId, date])
 }
