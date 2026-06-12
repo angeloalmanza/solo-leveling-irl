@@ -15,6 +15,8 @@ import bodyRoutes from './routes/body';
 import skillsRoutes from './routes/skills';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { globalLimiter } from './middleware/rateLimit';
+import { prisma } from './lib/prisma';
+import { Router } from 'express';
 
 const app = express();
 
@@ -34,22 +36,31 @@ app.use(pinoHttp({ logger }));
 app.use(globalLimiter);
 
 // Upload foto pasto: body grande solo su questa route (default 1mb altrove).
-app.use('/nutrition/photo-parse', express.json({ limit: '10mb' }));
+app.use('/v1/nutrition/photo-parse', express.json({ limit: '10mb' }));
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', version: '1.0.0' });
+// Health check: verifica anche la raggiungibilità del DB
+app.get('/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', version: '1.0.0', db: 'up' });
+  } catch {
+    res.status(503).json({ status: 'degraded', db: 'down' });
+  }
 });
 
-app.use('/auth', authRoutes);
-app.use('/character', characterRoutes);
-app.use('/quests', questRoutes);
-app.use('/nutrition', nutritionRoutes);
-app.use('/unlocks', unlockRoutes);
-app.use('/boss', bossRoutes);
-app.use('/progress', progressRoutes);
-app.use('/body', bodyRoutes);
-app.use('/skills', skillsRoutes);
+// API versionata sotto /v1 (per evolvere senza rompere i client esistenti)
+const v1 = Router();
+v1.use('/auth', authRoutes);
+v1.use('/character', characterRoutes);
+v1.use('/quests', questRoutes);
+v1.use('/nutrition', nutritionRoutes);
+v1.use('/unlocks', unlockRoutes);
+v1.use('/boss', bossRoutes);
+v1.use('/progress', progressRoutes);
+v1.use('/body', bodyRoutes);
+v1.use('/skills', skillsRoutes);
+app.use('/v1', v1);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

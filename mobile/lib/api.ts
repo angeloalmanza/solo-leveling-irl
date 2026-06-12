@@ -3,10 +3,17 @@ import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { useUiStore } from '../stores/uiStore';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.1.2:3000';
+const HOST = process.env.EXPO_PUBLIC_API_URL;
+if (!HOST) {
+  throw new Error(
+    'EXPO_PUBLIC_API_URL non impostato. Crea mobile/.env con EXPO_PUBLIC_API_URL=http://<IP-LAN>:3000 e riavvia Expo.'
+  );
+}
+// Tutte le richieste passano per l'API versionata /v1
+const API_URL = `${HOST}/v1`;
 
 export const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -25,7 +32,7 @@ let refreshPromise: Promise<string> | null = null;
 async function doRefresh(): Promise<string> {
   const refresh = await SecureStore.getItemAsync('refreshToken');
   if (!refresh) throw new Error('no refresh token');
-  const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken: refresh });
+  const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken: refresh });
   await SecureStore.setItemAsync('accessToken', data.accessToken);
   // Rotazione: il server restituisce un nuovo refresh token, va salvato.
   if (data.refreshToken) {

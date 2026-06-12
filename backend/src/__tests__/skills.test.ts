@@ -18,7 +18,7 @@ function userPayload(email: string) {
 }
 
 async function registerUser(email: string) {
-  const reg = await request(app).post('/auth/register').send(userPayload(email));
+  const reg = await request(app).post('/v1/auth/register').send(userPayload(email));
   const character = await prisma.character.findFirstOrThrow({ where: { user: { email } } });
   return { token: reg.body.accessToken as string, characterId: character.id };
 }
@@ -33,7 +33,7 @@ describe('POST /skills/:id/unlock', () => {
     const skill = await prisma.skill.create({
       data: { characterId, name: 'Potenza', description: 'd', type: 'passive', unlockLevel: 50, statBonus: { str: 2 } },
     });
-    const res = await request(app).post(`/skills/${skill.id}/unlock`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app).post(`/v1/skills/${skill.id}/unlock`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(400);
   });
 
@@ -47,13 +47,13 @@ describe('POST /skills/:id/unlock', () => {
     });
 
     // Figlio prima del genitore → 400
-    const fail = await request(app).post(`/skills/${child.id}/unlock`).set('Authorization', `Bearer ${token}`);
+    const fail = await request(app).post(`/v1/skills/${child.id}/unlock`).set('Authorization', `Bearer ${token}`);
     expect(fail.status).toBe(400);
 
     // Sblocca genitore, poi figlio → 200
-    const ok1 = await request(app).post(`/skills/${parent.id}/unlock`).set('Authorization', `Bearer ${token}`);
+    const ok1 = await request(app).post(`/v1/skills/${parent.id}/unlock`).set('Authorization', `Bearer ${token}`);
     expect(ok1.status).toBe(200);
-    const ok2 = await request(app).post(`/skills/${child.id}/unlock`).set('Authorization', `Bearer ${token}`);
+    const ok2 = await request(app).post(`/v1/skills/${child.id}/unlock`).set('Authorization', `Bearer ${token}`);
     expect(ok2.status).toBe(200);
   });
 
@@ -63,7 +63,7 @@ describe('POST /skills/:id/unlock', () => {
     const skillA = await prisma.skill.create({
       data: { characterId: a.characterId, name: 'SoloMia', description: 'd', type: 'passive', unlockLevel: 1, statBonus: { str: 1 } },
     });
-    const res = await request(app).post(`/skills/${skillA.id}/unlock`).set('Authorization', `Bearer ${b.token}`);
+    const res = await request(app).post(`/v1/skills/${skillA.id}/unlock`).set('Authorization', `Bearer ${b.token}`);
     expect(res.status).toBe(403);
   });
 });

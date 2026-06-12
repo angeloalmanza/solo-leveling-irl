@@ -16,7 +16,7 @@ describe('app smoke', () => {
   });
 
   it('endpoint protetto senza token → 401 JSON', async () => {
-    const res = await request(app).get('/character/me');
+    const res = await request(app).get('/v1/character/me');
     expect(res.status).toBe(401);
     expect(res.body).toHaveProperty('error');
   });
