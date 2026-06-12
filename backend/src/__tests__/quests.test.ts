@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../index';
 import { prisma } from '../lib/prisma';
-import { resetUsers } from './helpers';
+import { computeDifficultyHint } from '../routes/quests';
+import { resetUsers, makeCharacter } from './helpers';
 
 const user = {
   email: 'quests@example.com',
@@ -103,5 +104,64 @@ describe('POST /quests/daily/:id/complete', () => {
 
     const res = await request(app).post(`/v1/quests/daily/${q.id}/complete`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /quests/daily/:id/feedback', () => {
+  it('feedback su quest NON completata → 400', async () => {
+    const { token, quests } = await setup();
+    const res = await request(app)
+      .post(`/v1/quests/daily/${quests[0].id}/feedback`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ feedback: 'hard' });
+    expect(res.status).toBe(400);
+  });
+
+  it('feedback su quest completata → 204', async () => {
+    const { token, quests } = await setup();
+    const q = quests[0];
+    await request(app).post(`/v1/quests/daily/${q.id}/complete`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .post(`/v1/quests/daily/${q.id}/feedback`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ feedback: 'ok' });
+    expect(res.status).toBe(204);
+  });
+});
+
+describe('computeDifficultyHint', () => {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+
+  async function seedFeedback(characterId: string, feedbacks: ('easy' | 'ok' | 'hard')[]) {
+    for (const fb of feedbacks) {
+      await prisma.dailyQuest.create({
+        data: {
+          characterId, date: yesterday, title: 't', description: 'd',
+          category: 'fitness', xpReward: 10, statRewards: {}, difficulty: 1,
+          completed: true, feedback: fb,
+        },
+      });
+    }
+  }
+
+  it('2 hard (> easy) → easier', async () => {
+    const c = await makeCharacter();
+    await seedFeedback(c.id, ['hard', 'hard', 'ok']);
+    expect(await computeDifficultyHint(c.id, today)).toBe('easier');
+  });
+
+  it('3 easy (> hard) → harder', async () => {
+    const c = await makeCharacter();
+    await seedFeedback(c.id, ['easy', 'easy', 'easy']);
+    expect(await computeDifficultyHint(c.id, today)).toBe('harder');
+  });
+
+  it('misto bilanciato → null', async () => {
+    const c = await makeCharacter();
+    await seedFeedback(c.id, ['hard', 'hard', 'easy', 'easy']);
+    expect(await computeDifficultyHint(c.id, today)).toBeNull();
   });
 });

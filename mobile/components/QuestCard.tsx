@@ -14,6 +14,8 @@ const STAT_COLORS: Record<string, string> = {
   str: '#ff6666', agi: '#66ff99', int: '#6699ff', vit: '#ff99cc', end: '#ffcc44',
 };
 
+type Feedback = 'easy' | 'ok' | 'hard';
+
 interface Props {
   id: string;
   title: string;
@@ -23,13 +25,18 @@ interface Props {
   difficulty: number;
   completed: boolean;
   completing: boolean;
+  feedback?: Feedback | null;
+  isRecovery?: boolean;
+  recoveryBonusXp?: number;
   onComplete: () => void;
   onReroll: () => Promise<void>;
+  onFeedback?: (feedback: Feedback) => void;
 }
 
 export function QuestCard({
   title, description, xpReward, statRewards,
-  difficulty, completed, completing, onComplete, onReroll,
+  difficulty, completed, completing, feedback, isRecovery, recoveryBonusXp,
+  onComplete, onReroll, onFeedback,
 }: Props) {
   const [rerolling, setRerolling] = useState(false);
   const scale = useSharedValue(1);
@@ -118,10 +125,19 @@ export function QuestCard({
       </View>
     ));
 
+  const showFeedback = completed && !feedback && !!onFeedback;
+
   return (
     <Animated.View style={animStyle}>
+      {isRecovery && (
+        <View style={styles.recoveryBadge}>
+          <Text style={styles.recoveryBadgeText}>
+            ◆ QUEST DI RITORNO{recoveryBonusXp ? `  ·  +${recoveryBonusXp} XP BONUS` : ''}
+          </Text>
+        </View>
+      )}
       <TouchableOpacity
-        style={[styles.card, completed && styles.cardDone]}
+        style={[styles.card, completed && styles.cardDone, isRecovery && styles.cardRecovery]}
         onPress={handlePress}
         activeOpacity={0.85}
         disabled={completing}
@@ -162,6 +178,21 @@ export function QuestCard({
           </View>
         </View>
       </TouchableOpacity>
+
+      {showFeedback && (
+        <View style={styles.feedbackRow}>
+          <Text style={styles.feedbackLabel}>[ VALUTA LA MISSIONE ]</Text>
+          <View style={styles.feedbackBtns}>
+            {(['easy', 'ok', 'hard'] as const).map((fb) => (
+              <TouchableOpacity key={fb} style={styles.feedbackBtn} onPress={() => onFeedback?.(fb)}>
+                <Text style={styles.feedbackBtnText}>
+                  {fb === 'easy' ? 'TROPPO FACILE' : fb === 'ok' ? 'GIUSTA' : 'TROPPO DURA'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -178,6 +209,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   cardDone: { borderColor: Colors.border },
+  cardRecovery: { borderColor: '#ffd700' },
+  recoveryBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,215,0,0.12)', borderWidth: 1, borderColor: '#ffd700', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 6 },
+  recoveryBadgeText: { color: '#ffd700', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
+  feedbackRow: { marginTop: -4, marginBottom: 10, paddingHorizontal: 2 },
+  feedbackLabel: { color: Colors.textMuted, fontSize: 9, letterSpacing: 2, marginBottom: 6 },
+  feedbackBtns: { flexDirection: 'row', gap: 6 },
+  feedbackBtn: { flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 6, paddingVertical: 7, alignItems: 'center' },
+  feedbackBtnText: { color: Colors.textSecondary, fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
   left: { paddingTop: 2 },
   checkbox: {
     width: 22,

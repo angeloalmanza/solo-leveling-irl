@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { DailyQuest, QuestCategory } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middleware/requireAuth';
@@ -22,6 +23,9 @@ function toApiQuest(q: DailyQuest) {
     id: q.id,
     completed: q.completed,
     completedAt: q.completedAt,
+    feedback: q.feedback,
+    isRecovery: q.isRecovery,
+    recoveryBonusXp: q.recoveryBonusXp,
     questTemplate: {
       title: q.title,
       description: q.description,
@@ -31,6 +35,24 @@ function toApiQuest(q: DailyQuest) {
       difficulty: q.difficulty,
     },
   };
+}
+
+/** Suggerisce di calibrare la difficoltà in base al feedback dell'ultima settimana. */
+export async function computeDifficultyHint(
+  characterId: string,
+  today: Date
+): Promise<'easier' | 'harder' | null> {
+  const since = new Date(today);
+  since.setUTCDate(since.getUTCDate() - 7);
+  const recent = await prisma.dailyQuest.findMany({
+    where: { characterId, date: { gte: since, lt: today }, feedback: { not: null } },
+    select: { feedback: true },
+  });
+  const hard = recent.filter((q) => q.feedback === 'hard').length;
+  const easy = recent.filter((q) => q.feedback === 'easy').length;
+  if (hard >= 2 && hard > easy) return 'easier';
+  if (easy >= 3 && easy > hard) return 'harder';
+  return null;
 }
 
 type QuestSeed = {
@@ -91,9 +113,11 @@ router.get('/daily', requireAuth, asyncHandler(async (req, res: Response) => {
     return;
   }
 
+  const difficultyHint = await computeDifficultyHint(character.id, today);
+
   let seeds: QuestSeed[] | null = null;
   try {
-    const ai = await generateDailyQuests(character, { goals });
+    const ai = await generateDailyQuests(character, { goals, difficultyHint });
     const fitness = ai.filter((q) => q.category === 'fitness').slice(0, 2);
     const mente = ai.filter((q) => q.category === 'mente').slice(0, 2);
     if (fitness.length + mente.length >= 2) {
@@ -286,6 +310,25 @@ router.post('/daily/:id/complete', requireAuth, asyncHandler(async (req, res: Re
     streak: outcome.streak,
     multiplier: outcome.multiplier,
   });
+}));
+
+const FeedbackSchema = z.object({ feedback: z.enum(['easy', 'ok', 'hard']) });
+
+router.post('/daily/:id/feedback', requireAuth, asyncHandler(async (req, res: Response) => {
+  const userId = (req as AuthRequest).userId;
+  const parsed = FeedbackSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const character = await prisma.character.findUniqueOrThrow({ where: { userId } });
+  const upd = await prisma.dailyQuest.updateMany({
+    where: { id: req.params.id, characterId: character.id, completed: true },
+    data: { feedback: parsed.data.feedback },
+  });
+  if (upd.count !== 1) throw new HttpError(400, 'Feedback possibile solo su quest completate');
+  res.status(204).send();
 }));
 
 export default router;

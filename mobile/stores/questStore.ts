@@ -12,10 +12,15 @@ export interface QuestTemplate {
   difficulty: number;
 }
 
+export type Feedback = 'easy' | 'ok' | 'hard';
+
 export interface DailyQuest {
   id: string;
   completed: boolean;
   completedAt: string | null;
+  feedback: Feedback | null;
+  isRecovery: boolean;
+  recoveryBonusXp: number;
   questTemplate: QuestTemplate;
 }
 
@@ -48,6 +53,7 @@ interface QuestState {
   refresh: () => Promise<void>;
   reroll: (questId: string) => Promise<void>;
   complete: (questId: string) => Promise<CompleteResult>;
+  sendFeedback: (questId: string, feedback: Feedback) => Promise<void>;
 }
 
 export const useQuestStore = create<QuestState>((set, get) => ({
@@ -101,6 +107,17 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       return data as CompleteResult;
     } finally {
       set({ completing: null });
+    }
+  },
+
+  sendFeedback: async (questId, feedback) => {
+    // Update ottimistico, rollback su errore
+    const prev = get().quests;
+    set((s) => ({ quests: s.quests.map((q) => (q.id === questId ? { ...q, feedback } : q)) }));
+    try {
+      await api.post(`/quests/daily/${questId}/feedback`, { feedback });
+    } catch {
+      set({ quests: prev });
     }
   },
 }));

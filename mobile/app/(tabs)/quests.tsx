@@ -19,7 +19,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const DIFF_STARS = ['', '★', '★★', '★★★', '★★★★', '★★★★★'];
 
 export default function QuestsScreen() {
-  const { quests, loading, completing, fetch, reroll, complete } = useQuestStore();
+  const { quests, loading, completing, fetch, reroll, complete, sendFeedback } = useQuestStore();
   const { boss, loading: bossLoading, defeating, fetch: fetchBoss, completeTask, defeat } = useBossStore();
   const [bannerVisible, setBannerVisible] = useState(false);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
@@ -229,8 +229,12 @@ export default function QuestsScreen() {
                 difficulty={quest.questTemplate.difficulty}
                 completed={quest.completed}
                 completing={completing === quest.id}
+                feedback={quest.feedback}
+                isRecovery={quest.isRecovery}
+                recoveryBonusXp={quest.recoveryBonusXp}
                 onComplete={() => handleComplete(quest.id)}
                 onReroll={() => reroll(quest.id)}
+                onFeedback={(fb) => sendFeedback(quest.id, fb)}
               />
             ))}
           </View>
