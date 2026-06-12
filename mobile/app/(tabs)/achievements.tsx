@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useUnlockStore } from '../../stores/unlockStore';
 import { useCharacterStore } from '../../stores/characterStore';
+import { useUiStore } from '../../stores/uiStore';
 import { api } from '../../lib/api';
 import { Colors } from '../../constants/theme';
 
@@ -50,9 +51,17 @@ export default function AchievementsScreen() {
               titleReward={ach.titleReward}
               unlockedAt={ach.unlockedAt}
               isActive={character?.activeTitle === ach.titleReward}
-              onSetActive={() => {
+              onSetActive={async () => {
+                const prevTitle = character!.activeTitle;
+                // Update ottimistico
                 useCharacterStore.getState().setCharacter({ ...character!, activeTitle: ach.titleReward });
-                api.patch('/character/me', { activeTitle: ach.titleReward }).catch(() => {});
+                try {
+                  await api.patch('/character/me', { activeTitle: ach.titleReward });
+                } catch {
+                  // Rollback allo stato precedente + feedback
+                  useCharacterStore.getState().setCharacter({ ...character!, activeTitle: prevTitle });
+                  useUiStore.getState().showToast('Impossibile cambiare titolo', 'error');
+                }
               }}
             />
           ))}

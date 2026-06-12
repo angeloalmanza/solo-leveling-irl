@@ -10,8 +10,15 @@ export default tseslint.config(
       '**/dist/**',
       '**/build/**',
       '**/.expo/**',
+      '**/dist/**',
       'backend/prisma/migrations/**',
+      'shared/dist/**',
     ],
+  },
+  // Shared: TypeScript puro
+  {
+    files: ['shared/src/**/*.ts'],
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
   },
   // Backend: Node + TypeScript
   {

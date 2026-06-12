@@ -17,6 +17,14 @@ export async function requestPermissions(): Promise<boolean> {
   return status === 'granted';
 }
 
+/** Controlla i permessi SENZA mostrare il prompt di sistema. */
+export async function hasPermission(): Promise<boolean> {
+  if (isExpoGo) return false;
+  const { getPermissionsAsync } = await import('expo-notifications');
+  const { status } = await getPermissionsAsync();
+  return status === 'granted';
+}
+
 export async function scheduleDailyReminder(hour: number, minute: number): Promise<void> {
   if (isExpoGo) return;
   const Notifications = await import('expo-notifications');

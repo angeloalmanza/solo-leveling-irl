@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import { xpForNextLevel } from '@solo/shared';
 import { Colors } from '../constants/theme';
 
 interface Props {
@@ -9,7 +10,7 @@ interface Props {
 }
 
 export function XPBar({ xp, level }: Props) {
-  const required = level * 100;
+  const required = xpForNextLevel(level);
   const ratio = Math.min(xp / required, 1);
   const progress = useSharedValue(0);
 

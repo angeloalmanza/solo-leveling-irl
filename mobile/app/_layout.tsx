@@ -4,12 +4,13 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts, Orbitron_400Regular, Orbitron_700Bold, Orbitron_800ExtraBold } from '@expo-google-fonts/orbitron';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../stores/authStore';
-import { requestPermissions, scheduleDailyReminder, getSavedSettings } from '../lib/notifications';
+import { hasPermission, scheduleDailyReminder, getSavedSettings } from '../lib/notifications';
+import { Toast } from '../components/Toast';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const { isAuthenticated, hydrate } = useAuthStore();
+  const { hydrate } = useAuthStore();
 
   const [fontsLoaded, fontError] = useFonts({
     Orbitron_400Regular,
@@ -21,10 +22,11 @@ export default function RootLayout() {
     if (!fontsLoaded && !fontError) return;
     SplashScreen.hideAsync();
 
-    hydrate().then(async () => {
-      if (isAuthenticated) router.replace('/(tabs)/status');
-      const granted = await requestPermissions();
-      if (granted) {
+    hydrate().then(async (authed) => {
+      // Usa il valore restituito, non lo stato catturato alla prima render
+      if (authed) router.replace('/(tabs)/status');
+      // Non chiediamo i permessi all'avvio: schedula solo se già concessi.
+      if (await hasPermission()) {
         const { hour, minute, enabled } = await getSavedSettings();
         if (enabled) await scheduleDailyReminder(hour, minute);
       }
@@ -36,6 +38,7 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="light" />
+      <Toast />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />

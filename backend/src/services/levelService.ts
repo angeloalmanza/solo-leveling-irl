@@ -1,9 +1,14 @@
 import { Prisma, Rank } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { todayFor, DEFAULT_TZ } from '../lib/dates';
+import { calcRank as sharedCalcRank, streakMultiplier as sharedStreakMultiplier, xpForNextLevel } from '@solo/shared';
 
 /** Client Prisma o transazione interattiva. */
 type Db = Prisma.TransactionClient | typeof prisma;
+
+// Re-export dalle formule condivise (unica fonte di verità con il mobile)
+export const calcRank = (level: number): Rank => sharedCalcRank(level) as Rank;
+export const calcStreakMultiplier = sharedStreakMultiplier;
 
 export function getDynamicTitle(char: { str: number; agi: number; int: number; end: number; vit: number; activeTitle: string | null }): string {
   if (char.activeTitle) return char.activeTitle;
@@ -18,22 +23,6 @@ export function getDynamicTitle(char: { str: number; agi: number; int: number; e
     vit: 'Corpo Nutrito',
   };
   return titles[dominant ?? ''] ?? 'Cacciatore Equilibrato';
-}
-
-export function calcRank(level: number): Rank {
-  if (level >= 100) return 'S';
-  if (level >= 75) return 'A';
-  if (level >= 50) return 'B';
-  if (level >= 25) return 'C';
-  if (level >= 10) return 'D';
-  return 'E';
-}
-
-export function calcStreakMultiplier(streak: number): number {
-  if (streak >= 30) return 1.5;
-  if (streak >= 14) return 1.25;
-  if (streak >= 7) return 1.1;
-  return 1.0;
 }
 
 export interface LevelUpResult {
@@ -68,8 +57,8 @@ export async function applyXP(characterId: string, baseXp: number, today: Date, 
   let level = char.level;
   let xp = char.xp + xpGain;
 
-  while (xp >= level * 100) {
-    xp -= level * 100;
+  while (xp >= xpForNextLevel(level)) {
+    xp -= xpForNextLevel(level);
     level++;
   }
 
@@ -159,7 +148,7 @@ export async function applyInactivityPenalty(characterId: string, tz: string = D
     let xp = char.xp - totalPenalty;
     while (xp < 0 && level > 1) {
       level--;
-      xp = level * 100 + xp;
+      xp = xpForNextLevel(level) + xp;
     }
     xp = Math.max(0, xp);
 

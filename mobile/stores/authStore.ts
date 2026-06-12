@@ -8,7 +8,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
-  hydrate: () => Promise<void>;
+  hydrate: () => Promise<boolean>;
 }
 
 export interface RegisterData {
@@ -28,7 +28,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   hydrate: async () => {
     const token = await SecureStore.getItemAsync('accessToken');
-    if (token) set({ isAuthenticated: true });
+    const authed = !!token;
+    if (authed) set({ isAuthenticated: true });
+    return authed;
   },
 
   login: async (email, password) => {

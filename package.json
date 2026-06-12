@@ -3,11 +3,13 @@
   "private": true,
   "workspaces": [
     "mobile",
-    "backend"
+    "backend",
+    "shared"
   ],
   "scripts": {
     "mobile": "npm run start --workspace=mobile",
     "backend": "npm run dev --workspace=backend",
+    "build:shared": "npm run build --workspace=@solo/shared",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

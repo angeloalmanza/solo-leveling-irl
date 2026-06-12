@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.expo
+**/build
+.git
+*.log
+**/.env
+**/.env.*
+mobile/assets
+mobile/app
+mobile/components
+mobile/stores
+mobile/lib
+mobile/constants

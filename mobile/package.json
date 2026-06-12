@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo-google-fonts/orbitron": "^0.4.2",
     "@expo/vector-icons": "^15.1.1",
+    "@solo/shared": "*",
     "@ide/backoff": "^1.0.0",
     "@react-native-picker/picker": "2.11.1",
     "@types/react": "~19.1.10",

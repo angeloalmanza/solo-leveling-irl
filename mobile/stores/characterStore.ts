@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+// Formule di gioco dalla fonte condivisa (allineate al backend)
+export { xpForNextLevel, streakMultiplier } from '@solo/shared';
 
 export interface Character {
   id: string;
@@ -55,13 +57,3 @@ export const useCharacterStore = create<CharacterState>((set) => ({
   clearPenalty: () => set({ lastPenalty: null }),
 }));
 
-export function xpForNextLevel(level: number) {
-  return level * 100;
-}
-
-export function streakMultiplier(streak: number): number {
-  if (streak >= 30) return 1.5;
-  if (streak >= 14) return 1.25;
-  if (streak >= 7) return 1.1;
-  return 1.0;
-}

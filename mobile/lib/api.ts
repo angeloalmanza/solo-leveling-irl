@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
+import { useUiStore } from '../stores/uiStore';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.1.2:3000';
 
@@ -64,6 +65,14 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
     }
+
+    // Feedback uniforme su errori globali (rete/server). I 4xx restano ai chiamanti.
+    if (!error.response) {
+      useUiStore.getState().showToast('Connessione al Sistema persa', 'error');
+    } else if (error.response.status >= 500) {
+      useUiStore.getState().showToast('Errore del Sistema, riprova più tardi', 'error');
+    }
+
     return Promise.reject(error);
   }
 );

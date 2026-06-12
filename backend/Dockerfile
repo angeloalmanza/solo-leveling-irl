@@ -1,31 +1,35 @@
+# Build context = repo root (vedi docker-compose.yml). Monorepo npm workspaces.
 # ── Builder ──────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
-
-# openssl serve a Prisma per generare il query engine
 RUN apk add --no-cache openssl
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+COPY shared/package.json ./shared/
+COPY backend/package.json ./backend/
+COPY mobile/package.json ./mobile/
+RUN npm ci
 
-COPY prisma ./prisma
-RUN npx prisma generate
+COPY shared ./shared
+RUN npm run build --workspace=@solo/shared
 
-COPY tsconfig.json ./
-COPY src ./src
-RUN npm run build
+COPY backend ./backend
+RUN npx prisma generate --schema backend/prisma/schema.prisma
+RUN npm run build --workspace=backend
 
 # ── Runtime ──────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-
 RUN apk add --no-cache openssl
 
-COPY package.json ./
+COPY package.json package-lock.json ./
+COPY shared/package.json ./shared/
+COPY backend/package.json ./backend/
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/backend/prisma ./backend/prisma
 
 EXPOSE 3000
-CMD ["node", "dist/index.js"]
+CMD ["node", "backend/dist/index.js"]
