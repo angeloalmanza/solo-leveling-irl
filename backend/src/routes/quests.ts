@@ -53,15 +53,12 @@ function aiToSeed(q: AIQuest): QuestSeed {
 }
 
 async function createQuests(characterId: string, date: Date, seeds: QuestSeed[]): Promise<DailyQuest[]> {
-  const created: DailyQuest[] = [];
-  for (const s of seeds) {
-    created.push(
-      await prisma.dailyQuest.create({
-        data: { characterId, date, ...s, statRewards: s.statRewards as object },
-      })
-    );
-  }
-  return created;
+  // Tutte le quest del giorno create atomicamente: niente set parziali se una fallisce.
+  return prisma.$transaction(
+    seeds.map((s) =>
+      prisma.dailyQuest.create({ data: { characterId, date, ...s, statRewards: s.statRewards as object } })
+    )
+  );
 }
 
 async function fallbackSeeds(fitnessNeeded: number, menteNeeded: number): Promise<QuestSeed[]> {
