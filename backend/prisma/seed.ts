@@ -3,6 +3,15 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  // Idempotente: se i cataloghi sono già popolati salto il seed
+  // (evita di cancellare ombre/achievement sbloccati a ogni avvio del server).
+  const force = process.argv.includes('--force');
+  const already = await prisma.questTemplate.count();
+  if (already > 0 && !force) {
+    console.log('Seed già presente, salto (usa --force per rifarlo).');
+    return;
+  }
+
   await prisma.unlockedAchievement.deleteMany();
   await prisma.unlockedShadow.deleteMany();
   await prisma.achievement.deleteMany();
